@@ -561,3 +561,209 @@ export async function reviewCompanyRequest(
     body: JSON.stringify({ status }),
   });
 }
+
+// ─────────────────────────────────────────────────────────────────
+// EQUIPES (TEAMS)
+// ─────────────────────────────────────────────────────────────────
+
+export type EquipeMember = {
+  id: string;
+  equipeId: string;
+  userId: string;
+  role: 'LEADER' | 'MEMBER';
+  joinedAt: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatarUrl?: string | null;
+    mainSpecialty?: string | null;
+  };
+};
+
+export type EquipeInvitation = {
+  id: string;
+  equipeId: string;
+  inviterId: string;
+  inviteeId: string;
+  status: 'PENDING' | 'ACCEPTED' | 'DECLINED' | 'EXPIRED';
+  createdAt: string;
+  invitee?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    avatarUrl?: string | null;
+  };
+  inviter?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatarUrl?: string | null;
+  };
+  equipe?: Equipe;
+};
+
+export type Equipe = {
+  id: string;
+  name: string;
+  competitionId: string;
+  status: 'FORMING' | 'READY' | 'PARTICIPATING';
+  isAutoFormed: boolean;
+  members: EquipeMember[];
+  invitations?: EquipeInvitation[];
+  competition?: {
+    id: string;
+    title: string;
+    status: string;
+    specialty?: string | null;
+  };
+  myRole?: 'LEADER' | 'MEMBER';
+  githubUrl?: string | null;
+  score?: number | null;
+  submittedAt?: string | null;
+  isWinner?: boolean;
+  createdAt: string;
+};
+
+export type SearchUserResult = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  avatarUrl?: string | null;
+  mainSpecialty?: string | null;
+  alreadyInTeam?: boolean;
+  inSoloQueue?: boolean;
+};
+
+export async function createEquipe(
+  competitionId: string,
+  name: string,
+): Promise<Equipe> {
+  const res = await request('/equipes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ competitionId, name }),
+  });
+  return res as unknown as Equipe;
+}
+
+export async function getMyEquipe(
+  competitionId: string,
+): Promise<Equipe | null> {
+  try {
+    const res = await request(`/equipes/my-equipe/${competitionId}`, {
+      method: 'GET',
+    });
+    return (res as unknown as Equipe) || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getEquipeById(equipeId: string): Promise<Equipe> {
+  const res = await request(`/equipes/${equipeId}`, { method: 'GET' });
+  return res as unknown as Equipe;
+}
+
+export async function getCompetitionEquipes(
+  competitionId: string,
+): Promise<{ competitionId: string; equipes: Equipe[]; total: number }> {
+  const res = await request(`/equipes/competition/${competitionId}`, {
+    method: 'GET',
+  });
+  return res as unknown as {
+    competitionId: string;
+    equipes: Equipe[];
+    total: number;
+  };
+}
+
+export async function inviteToEquipe(
+  equipeId: string,
+  email: string,
+): Promise<{ message: string }> {
+  const res = await request(`/equipes/${equipeId}/invite`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  return res as { message: string };
+}
+
+export async function getMyInvitations(): Promise<{
+  invitations: EquipeInvitation[];
+  total: number;
+}> {
+  const res = await request('/equipe-invitations/my-invitations', {
+    method: 'GET',
+  });
+  return res as unknown as { invitations: EquipeInvitation[]; total: number };
+}
+
+export async function acceptInvitation(
+  invitationId: string,
+): Promise<Equipe> {
+  const res = await request(`/equipe-invitations/${invitationId}/accept`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return res as unknown as Equipe;
+}
+
+export async function declineInvitation(
+  invitationId: string,
+): Promise<{ message: string }> {
+  const res = await request(`/equipe-invitations/${invitationId}/decline`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return res as { message: string };
+}
+
+export async function joinSolo(
+  competitionId: string,
+): Promise<{ message: string }> {
+  const res = await request(`/competitions/${competitionId}/join-solo`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  return res as { message: string };
+}
+
+export async function searchUsersForInvite(
+  query: string,
+  competitionId?: string,
+): Promise<SearchUserResult[]> {
+  const params = new URLSearchParams({ query });
+  if (competitionId) params.set('competitionId', competitionId);
+  const res = await request(`/equipes/search-users?${params.toString()}`, {
+    method: 'GET',
+  });
+  return res as unknown as SearchUserResult[];
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TEAM CHAT
+// ─────────────────────────────────────────────────────────────────
+
+/** Rejoindre le canal de chat privé de son équipe pour un hackathon donné. */
+export async function joinTeamChat(
+  equipeId: string,
+  competitionId: string,
+): Promise<{ ok: boolean }> {
+  const res = await request(
+    `/stream/team/${encodeURIComponent(equipeId)}/comp/${encodeURIComponent(competitionId)}/join`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    },
+  );
+  return res as { ok: boolean };
+}

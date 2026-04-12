@@ -8,11 +8,18 @@ import PlatformNavbar from "../components/PlatformNavbar";
 import { 
   getHackathonRooms, 
   getCompetitions, 
-  joinCompetition, 
   getMyParticipation, 
+  getMyEquipe,
+  createEquipe,
+  joinSolo,
+  getMyInvitations,
+  acceptInvitation,
+  declineInvitation,
   getProfile,
   getToken,
-  type Competition
+  type Competition,
+  type Equipe,
+  type EquipeInvitation
 } from "../lib/api";
 
 type Room = { id: string; name: string; description: string; specialty?: string; canParticipate: boolean };
@@ -64,10 +71,24 @@ export default function UserDashboardPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [myJoinedIds, setMyJoinedIds] = useState<Set<string>>(new Set());
+  const [myEquipes, setMyEquipes] = useState<Record<string, Equipe>>({});
+  const [invitations, setInvitations] = useState<EquipeInvitation[]>([]);
+  
+  // Modal state for creating equipe
+  const [showCreateModal, setShowCreateModal] = useState<string | null>(null);
+  const [newTeamName, setNewTeamName] = useState("");
+  const [creating, setCreating] = useState(false);
   
   const [search, setSearch] = useState("");
   const [activeTech, setActiveTech] = useState<string>("all");
   const [activeStatus, setActiveStatus] = useState<string>("all");
+
+  const loadInvitations = async () => {
+    try {
+      const res = await getMyInvitations();
+      setInvitations(res.invitations ?? []);
+    } catch {}
+  };
 
   useEffect(() => {
     const token = getToken();
@@ -90,23 +111,67 @@ export default function UserDashboardPage() {
         compRes.data.forEach(async (c) => {
            try {
              const p = await getMyParticipation(c.id);
-             if (p) setMyJoinedIds(prev => {
-                const next = new Set(prev);
-                next.add(c.id);
-                return next;
-             });
+             if (p) {
+               setMyJoinedIds(prev => {
+                  const next = new Set(prev);
+                  next.add(c.id);
+                  return next;
+               });
+             }
+             const eq = await getMyEquipe(c.id);
+             if (eq) {
+               setMyEquipes(prev => ({ ...prev, [c.id]: eq }));
+             }
            } catch {}
         });
       }
+      
+      loadInvitations();
     }).catch(console.error).finally(() => setLoading(false));
   }, [router]);
 
-  const handleJoin = async (id: string) => {
+  const handleCreateEquipe = async (competitionId: string) => {
+    if (!newTeamName.trim()) return;
+    setCreating(true);
     try {
-      await joinCompetition(id);
+      const eq = await createEquipe(competitionId, newTeamName.trim());
+      setMyEquipes(prev => ({ ...prev, [competitionId]: eq }));
+      setMyJoinedIds(prev => new Set(prev).add(competitionId));
+      setShowCreateModal(null);
+      setNewTeamName("");
+    } catch (err: any) {
+      alert(err?.message ?? "Erreur lors de la création de l'équipe");
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleJoinSolo = async (id: string) => {
+    try {
+      await joinSolo(id);
       setMyJoinedIds(prev => new Set(prev).add(id));
     } catch (err: any) {
       alert(err?.message ?? "Erreur d'inscription");
+    }
+  };
+
+  const handleAcceptInvite = async (inv: EquipeInvitation) => {
+    try {
+      const eq = await acceptInvitation(inv.id);
+      setMyEquipes(prev => ({ ...prev, [eq.competitionId]: eq }));
+      setMyJoinedIds(prev => new Set(prev).add(eq.competitionId));
+      setInvitations(prev => prev.filter(i => i.id !== inv.id));
+    } catch (err: any) {
+      alert(err?.message ?? "Erreur");
+    }
+  };
+
+  const handleDeclineInvite = async (invId: string) => {
+    try {
+      await declineInvitation(invId);
+      setInvitations(prev => prev.filter(i => i.id !== invId));
+    } catch (err: any) {
+      alert(err?.message ?? "Erreur");
     }
   };
 
@@ -159,6 +224,31 @@ export default function UserDashboardPage() {
                 <SidebarTab label="Communauté" icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" active={activeView === "COMMUNITY"} onClick={() => setActiveView("COMMUNITY")} />
              </nav>
           </div>
+
+          {/* Invitations */}
+          {invitations.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 px-2">
+                <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse"></div>
+                <p className="text-[10px] font-black text-violet-400 uppercase tracking-widest">Invitations ({invitations.length})</p>
+              </div>
+              {invitations.map(inv => (
+                <div key={inv.id} className="p-4 rounded-2xl bg-violet-500/5 border border-violet-500/10 space-y-3">
+                  <p className="text-[11px] text-white/80 font-semibold truncate">{inv.equipe?.name || "Équipe"}</p>
+                  <p className="text-[9px] text-white/40">{inv.equipe?.competition?.title}</p>
+                  <p className="text-[9px] text-white/30">De: {inv.inviter?.firstName} {inv.inviter?.lastName}</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => handleAcceptInvite(inv)} className="flex-1 py-2 rounded-xl bg-emerald-500 text-black text-[9px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all">
+                      Accepter
+                    </button>
+                    <button onClick={() => handleDeclineInvite(inv.id)} className="flex-1 py-2 rounded-xl bg-white/5 border border-white/10 text-[9px] font-black uppercase tracking-widest text-white/40 hover:text-red-400 hover:border-red-500/30 transition-all">
+                      Refuser
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="mt-auto">
              <div className="p-6 rounded-[32px] bg-white/[0.02] border border-white/5 space-y-4 relative overflow-hidden group">
@@ -281,8 +371,10 @@ export default function UserDashboardPage() {
                       <CompetitionCard 
                         key={c.id} 
                         competition={c} 
-                        isJoined={myJoinedIds.has(c.id)} 
-                        onJoin={() => handleJoin(c.id)}
+                        isJoined={myJoinedIds.has(c.id)}
+                        equipe={myEquipes[c.id]}
+                        onCreateEquipe={() => setShowCreateModal(c.id)}
+                        onJoinSolo={() => handleJoinSolo(c.id)}
                       />
                     ))}
                   </div>
@@ -291,6 +383,46 @@ export default function UserDashboardPage() {
           )}
         </main>
       </div>
+
+      {/* Create Equipe Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCreateModal(null)}>
+          <div className="bg-[#0d1424] border border-white/10 rounded-[32px] p-8 max-w-md w-full space-y-6 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="space-y-2">
+              <h3 className="text-2xl font-black italic uppercase text-white tracking-tight">Créer une Équipe</h3>
+              <p className="text-[11px] text-white/40">Formez une équipe de 3 membres pour ce hackathon. Vous serez le leader.</p>
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">Nom de l&apos;équipe</label>
+              <input 
+                type="text" 
+                value={newTeamName} 
+                onChange={e => setNewTeamName(e.target.value)}
+                placeholder="Ex: Les Hackers, Team Alpha..."
+                className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white outline-none focus:border-cyan-500/50 transition-all placeholder:text-white/20"
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex gap-3">
+              <button 
+                onClick={() => setShowCreateModal(null)}
+                className="flex-1 py-4 rounded-2xl bg-white/5 border border-white/10 text-[11px] font-black uppercase tracking-widest text-white/40 hover:text-white transition-all"
+              >
+                Annuler
+              </button>
+              <button 
+                onClick={() => handleCreateEquipe(showCreateModal)}
+                disabled={creating || !newTeamName.trim()}
+                className="flex-1 py-4 rounded-2xl bg-cyan-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+              >
+                {creating ? "Création..." : "Créer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -316,7 +448,7 @@ function SidebarTab({ label, icon, active, onClick }: { label: string, icon: str
   );
 }
 
-function CompetitionCard({ competition: c, isJoined, onJoin }: { competition: Competition, isJoined: boolean, onJoin: () => void }) {
+function CompetitionCard({ competition: c, isJoined, equipe, onCreateEquipe, onJoinSolo }: { competition: Competition, isJoined: boolean, equipe?: Equipe, onCreateEquipe: () => void, onJoinSolo: () => void }) {
   const timeLeft = useCountdown(c.endDate);
   const isExpired = timeLeft === "EXPIRED" || c.status === "COMPLETED" || c.status === "ARCHIVED";
   const isOpen = c.status === "OPEN_FOR_ENTRY";
@@ -324,7 +456,6 @@ function CompetitionCard({ competition: c, isJoined, onJoin }: { competition: Co
 
   return (
     <div className="group bg-[#0a0f1a] border border-white/5 rounded-[40px] p-8 flex flex-col gap-8 transition-all duration-500 hover:border-cyan-500/30 hover:bg-[#0d1424] hover:shadow-2xl hover:shadow-cyan-500/5 relative overflow-hidden">
-       {/* Background Glow */}
        <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/[0.02] blur-[100px] -z-10 group-hover:bg-cyan-500/[0.05] transition-all"></div>
        
        <div className="flex items-start justify-between gap-6">
@@ -341,9 +472,19 @@ function CompetitionCard({ competition: c, isJoined, onJoin }: { competition: Co
                 <span className="px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-[9px] font-black uppercase tracking-widest border border-cyan-500/20">
                    {c.specialty}
                 </span>
+                {isJoined && equipe && (
+                  <span className="px-3 py-1 rounded-full bg-violet-500/20 text-violet-400 text-[9px] font-black uppercase tracking-widest border border-violet-500/20">
+                     {equipe.name} ({equipe.members?.length || 0}/3)
+                  </span>
+                )}
+                {isJoined && !equipe && (
+                  <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-[9px] font-black uppercase tracking-widest border border-amber-500/20">
+                     File Solo
+                  </span>
+                )}
                 {isJoined && (
                   <span className="px-3 py-1 rounded-full bg-emerald-500 text-black text-[9px] font-black uppercase tracking-widest shadow-[0_0_15px_rgba(16,185,129,0.3)] animate-pulse">
-                     ✓ INSCRIT
+                     INSCRIT
                   </span>
                 )}
              </div>
@@ -408,14 +549,25 @@ function CompetitionCard({ competition: c, isJoined, onJoin }: { competition: Co
                     </Link>
                   )}
                </>
-             ) : (
-               <button 
-                  onClick={onJoin}
-                  disabled={isExpired}
-                  className={`px-12 py-4 rounded-3xl text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 ${isExpired ? 'bg-white/5 text-white/20 cursor-not-allowed' : 'bg-cyan-500 text-black hover:bg-cyan-400 shadow-xl shadow-cyan-500/20'}`}
-               >
-                  {isExpired ? "Indisponible" : "S'inscrire Maintenant"}
+             ) : isExpired ? (
+               <button disabled className="px-12 py-4 rounded-3xl bg-white/5 text-white/20 text-[11px] font-black uppercase tracking-widest cursor-not-allowed">
+                  Indisponible
                </button>
+             ) : (
+               <div className="flex gap-2">
+                  <button 
+                    onClick={onCreateEquipe}
+                    className="px-6 py-4 rounded-3xl bg-cyan-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-cyan-400 shadow-xl shadow-cyan-500/20 transition-all active:scale-95"
+                  >
+                     Créer une Équipe
+                  </button>
+                  <button 
+                    onClick={onJoinSolo}
+                    className="px-6 py-4 rounded-3xl bg-white/[0.03] border border-white/10 text-[11px] font-black uppercase tracking-widest hover:border-amber-500/40 hover:text-amber-400 transition-all active:scale-95"
+                  >
+                     Pas d&apos;équipe
+                  </button>
+               </div>
              )}
           </div>
        </div>

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import VideoCall from "../stream/VideoCall";
 import { RoomChatChannel } from "./RoomChatChannel";
-import { type Competition, submitWork } from "../../lib/api";
+import { type Competition, submitWork, getMyParticipation } from "../../lib/api";
 
 type Tab = "chat" | "video";
 
@@ -11,7 +11,6 @@ type RoomStreamPanelProps = {
   roomId: string;
   roomName: string;
   competition?: Competition;
-  /** Mise en page : "tabs" (onglets Chat | Vidéo) ou "split" (côte à côte). */
   layout?: "tabs" | "split";
 };
 
@@ -21,6 +20,20 @@ export default function RoomStreamPanel({
   competition,
   layout = "tabs",
 }: RoomStreamPanelProps) {
+  const [isLeader, setIsLeader] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!competition) return;
+    getMyParticipation(competition.id).then((p) => {
+      if (p) {
+        const role = (p as any).equipeRole;
+        // Leader can submit; if no equipe (solo), also allow
+        setIsLeader(role === "LEADER" || !p.equipeId);
+      } else {
+        setIsLeader(false);
+      }
+    }).catch(() => setIsLeader(false));
+  }, [competition]);
   const [tab, setTab] = useState<Tab>("chat");
   const [githubUrl, setGithubUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -102,22 +115,28 @@ export default function RoomStreamPanel({
                 <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
                 <p className="text-[10px] font-black uppercase tracking-widest text-cyan-400">Fenêtre de Soumission Ouverte</p>
               </div>
-              <form onSubmit={handleSubmit} className="space-y-2">
-                <input 
-                  type="url"
-                  placeholder="Lien GitHub du projet..."
-                  required
-                  value={githubUrl}
-                  onChange={e => setGithubUrl(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
-                />
-                <button 
-                  disabled={submitting}
-                  className="w-full bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
-                >
-                  {submitting ? "ENVOI..." : "SOUMETTRE MON TRAVAIL"}
-                </button>
-              </form>
+              {isLeader ? (
+                <form onSubmit={handleSubmit} className="space-y-2">
+                  <input 
+                    type="url"
+                    placeholder="Lien GitHub du projet..."
+                    required
+                    value={githubUrl}
+                    onChange={e => setGithubUrl(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white outline-none focus:ring-1 focus:ring-cyan-500 transition-all"
+                  />
+                  <button 
+                    disabled={submitting}
+                    className="w-full bg-cyan-500 hover:bg-cyan-400 text-black px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                  >
+                    {submitting ? "ENVOI..." : "SOUMETTRE LE TRAVAIL"}
+                  </button>
+                </form>
+              ) : (
+                <p className="text-[10px] text-amber-400/80 font-semibold">
+                  Seul le leader de votre équipe peut soumettre le travail final.
+                </p>
+              )}
               {submitMsg && (
                 <p className={`text-[9px] font-bold uppercase tracking-widest ${submitMsg.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
                   {submitMsg.text}
@@ -140,24 +159,30 @@ export default function RoomStreamPanel({
         <div className="mx-4 mt-4 p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl flex flex-col sm:flex-row items-center gap-4 animate-in slide-in-from-top-4 duration-500">
            <div className="flex-1 text-center sm:text-left">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 mb-1">Hackathon Closing Soon</p>
-              <p className="text-xs text-white/70">Soumettez votre repository GitHub pour l&apos;évaluation finale.</p>
+              <p className="text-xs text-white/70">
+                {isLeader
+                  ? "Soumettez votre repository GitHub pour l'évaluation finale."
+                  : "Seul le leader de votre équipe peut soumettre le travail final."}
+              </p>
            </div>
-           <form onSubmit={handleSubmit} className="flex gap-2 w-full sm:w-auto">
-              <input 
-                type="url" 
-                placeholder="Repository URL" 
-                required
-                value={githubUrl}
-                onChange={e => setGithubUrl(e.target.value)}
-                className="flex-1 sm:w-64 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:ring-1 focus:ring-cyan-500 transition-all font-mono"
-              />
-              <button 
-                disabled={submitting}
-                className="bg-cyan-500 hover:bg-cyan-400 text-black px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-50"
-              >
-                {submitting ? "SENDING..." : "SUBMIT"}
-              </button>
-           </form>
+           {isLeader && (
+             <form onSubmit={handleSubmit} className="flex gap-2 w-full sm:w-auto">
+                <input 
+                  type="url" 
+                  placeholder="Repository URL" 
+                  required
+                  value={githubUrl}
+                  onChange={e => setGithubUrl(e.target.value)}
+                  className="flex-1 sm:w-64 bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:ring-1 focus:ring-cyan-500 transition-all font-mono"
+                />
+                <button 
+                  disabled={submitting}
+                  className="bg-cyan-500 hover:bg-cyan-400 text-black px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-cyan-500/20 disabled:opacity-50"
+                >
+                  {submitting ? "ENVOI..." : "SOUMETTRE"}
+                </button>
+             </form>
+           )}
            {submitMsg && (
             <div className={`px-3 py-2 rounded-lg text-[9px] font-bold uppercase tracking-widest ${submitMsg.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
               {submitMsg.text}
