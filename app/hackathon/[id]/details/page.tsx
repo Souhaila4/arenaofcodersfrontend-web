@@ -8,6 +8,8 @@ import {
   getProfile,
   getCompetitionById,
   getCompetitionParticipantsForAdmin,
+  getCompetitionTopParticipants,
+  notifyPreSelectedParticipants,
   selectWinner,
   type Competition,
   type CompetitionParticipantAdmin,
@@ -25,6 +27,8 @@ export default function HackathonDetailsPage() {
   
   const [competition, setCompetition] = useState<Competition | null>(null);
   const [participants, setParticipants] = useState<CompetitionParticipantAdmin[]>([]);
+  const [preselected, setPreselected] = useState<CompetitionParticipantAdmin[]>([]);
+  const [notifyLoading, setNotifyLoading] = useState(false);
 
   useEffect(() => {
     if (!getToken()) {
@@ -41,13 +45,15 @@ export default function HackathonDetailsPage() {
         return Promise.all([
           getCompetitionById(id),
           getCompetitionParticipantsForAdmin(id),
+          getCompetitionTopParticipants(id),
         ]);
       })
       .then((result) => {
         if (!result) return;
-        const [comp, partsData] = result;
+        const [comp, partsData, topData] = result;
         setCompetition(comp);
         setParticipants(partsData.participants ?? []);
+        setPreselected(topData.preselected ?? []);
       })
       .catch((err) => setError(err?.message ?? "Erreur de chargement des détails"))
       .finally(() => {
@@ -73,6 +79,26 @@ export default function HackathonDetailsPage() {
           ? (err as { message: string }).message
           : "Erreur lors de la sélection du gagnant";
       setError(msg);
+    }
+  };
+
+  const handleNotifyPreselection = async () => {
+    setSuccess(null);
+    setError(null);
+    if (!confirm("Voulez-vous notifier tous les participants pré-sélectionnés par email ?")) return;
+
+    setNotifyLoading(true);
+    try {
+      const response = await notifyPreSelectedParticipants(id);
+      setSuccess(`${response.notifiedCount} email(s) ont été mis en file d'attente pour être envoyés !`);
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === "object" && "message" in err && typeof (err as { message?: string }).message === "string"
+          ? (err as { message: string }).message
+          : "Erreur lors de la notification de la pré-sélection";
+      setError(msg);
+    } finally {
+      setNotifyLoading(false);
     }
   };
 
@@ -184,6 +210,65 @@ export default function HackathonDetailsPage() {
             </div>
           </div>
         )}
+
+        {/* SECTION PRÉ-SÉLECTION */}
+        <div className="mb-12">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+              Pré-sélection
+              <span className="text-sm font-normal text-white/40 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300">
+                Top {competition?.topN ?? 5}
+              </span>
+            </h2>
+            <button
+              onClick={handleNotifyPreselection}
+              disabled={notifyLoading || preselected.length === 0}
+              className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 disabled:bg-indigo-500/50 disabled:cursor-not-allowed text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 shadow-lg shadow-indigo-500/20"
+            >
+              {notifyLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+              )}
+              Notifier par email
+            </button>
+          </div>
+
+          {preselected.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl border border-indigo-500/10 bg-indigo-500/5">
+              <p className="text-indigo-200/50">Aucun participant n'est encore pré-sélectionné. (Nécessite des évaluations terminées)</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {preselected.map((p, i) => {
+                const uniqueKey = p.id || (p as any).participantId || `preselected-${i}`;
+                return (
+                <div key={uniqueKey} className="p-5 rounded-2xl border border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 transition-colors flex flex-col gap-3 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-indigo-500/20 to-transparent rounded-bl-3xl z-0" />
+                  <div className="flex items-center gap-3 z-10">
+                    <div className="w-10 h-10 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center font-bold text-lg">
+                      #{i + 1}
+                    </div>
+                    <div>
+                      <p className="font-bold text-white text-lg">{p.user?.firstName} {p.user?.lastName}</p>
+                      <p className="text-xs text-white/50">{p.user?.email}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-3 border-t border-indigo-500/10 flex justify-between items-center z-10">
+                    <div>
+                      <p className="text-[10px] uppercase text-indigo-300">Score</p>
+                      <p className="font-mono text-xl font-bold text-white">{p.score ?? 0}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] uppercase text-indigo-300">Anti-Triche</p>
+                      <p className="font-mono font-bold text-emerald-400">{p.antiCheatConfidenceLevel ?? 0}%</p>
+                    </div>
+                  </div>
+                </div>
+              )})}
+            </div>
+          )}
+        </div>
 
         <h2 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
           Saisies & Classement

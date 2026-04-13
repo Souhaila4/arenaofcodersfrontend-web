@@ -499,6 +499,26 @@ export async function selectWinner(
   return res as Record<string, unknown>;
 }
 
+/** Récupère les top participants (Pré-sélection) pour un hackathon donné. */
+export async function getCompetitionTopParticipants(competitionId: string): Promise<{
+  preselected: CompetitionParticipantAdmin[];
+  totalPreselected: number;
+}> {
+  const res = await request(`/competitions/${competitionId}/top-participants`, { method: "GET" });
+  return res as { preselected: CompetitionParticipantAdmin[]; totalPreselected: number };
+}
+
+/** Declenche l'envoi des emails de pré-sélection (Admin/Company). */
+export async function notifyPreSelectedParticipants(
+  competitionId: string,
+): Promise<{ success: boolean; notifiedCount: number; totalPreselected: number }> {
+  const res = await request(`/competitions/${competitionId}/pre-selection/notify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  return res as { success: boolean; notifiedCount: number; totalPreselected: number };
+}
+
 /** Récupère le statut de participation de l'utilisateur actuel pour un hackathon donné. */
 export async function getMyParticipation(competitionId: string): Promise<Record<string, unknown> | null> {
   try {
