@@ -8,6 +8,7 @@ import GlowButton from "../ui/GlowButton";
 interface HeroSectionProps {
   user?: any;
   aiTag: string;
+  kicker: string;
   title: string;
   titleHighlight1: string;
   titleMid: string;
@@ -20,6 +21,7 @@ interface HeroSectionProps {
 export default function HeroSection({
   user,
   aiTag,
+  kicker,
   title,
   titleHighlight1,
   titleMid,
@@ -34,20 +36,22 @@ export default function HeroSection({
         {/* Left: Text content */}
         <div className="flex-1 order-2 lg:order-1">
           {/* Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/40 bg-transparent px-4 py-1.5 mb-6"
-          >
-            <span
-              className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse"
-              aria-hidden
-            />
-            <span className="text-sm font-medium text-[var(--accent)] tracking-wide">
-              {aiTag}
-            </span>
-          </motion.div>
+          {aiTag && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/40 bg-transparent px-4 py-1.5 mb-6"
+            >
+              <span
+                className="w-2 h-2 rounded-full bg-[var(--accent)] animate-pulse"
+                aria-hidden
+              />
+              <span className="text-sm font-medium text-[var(--accent)] tracking-wide">
+                {aiTag}
+              </span>
+            </motion.div>
+          )}
 
           {/* Small intro */}
           <motion.p
@@ -56,15 +60,12 @@ export default function HeroSection({
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-sm tracking-wide text-[var(--text-secondary)] uppercase mb-4"
           >
-            Prouvez vos compétences
+            {kicker}
           </motion.p>
 
           {/* Title - massive with gradient on keywords */}
           <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.2 }}
-            className="text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-tight max-w-4xl"
+            className="text-2xl sm:text-3xl md:text-5xl lg:text-6xl xl:text-7xl font-bold leading-[1.2] md:leading-tight max-w-4xl text-[var(--text-primary)]"
           >
             {title}
             <span

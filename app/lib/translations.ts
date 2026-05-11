@@ -19,7 +19,8 @@ export const translations = {
     },
     competitiveHub: "COMPETITIVE HUB",
     hero: {
-      aiTag: "Propulsé par l'IA générative",
+      aiTag: "",
+      kicker: "Prouvez vos compétences",
       title: "Transformez comment les ",
       titleHighlight1: "talents",
       titleMid: " prouvent leur ",
@@ -75,6 +76,7 @@ export const translations = {
     },
     trust: {
       title: "Ils nous font confiance",
+      badges: ["Propulsé par l'IA", "Sécurisé", "ISO 27001", "RGPD"],
     },
     evaluation: {
       title: "Évaluation basée sur la donnée réelle",
@@ -83,6 +85,7 @@ export const translations = {
       item1: "Score de compétence dynamique",
       item2: "Analyse anti-plagiat avancée",
       item3: "Classements par stacks technologiques",
+      playVideo: "Lire la vidéo de démonstration",
     },
     arena: {
       liveBanner: "• TOURNOIS EN DIRECT OUVERTS",
@@ -179,7 +182,8 @@ export const translations = {
     },
     competitiveHub: "COMPETITIVE HUB",
     hero: {
-      aiTag: "Powered by generative AI",
+      aiTag: "",
+      kicker: "Prove your skills",
       title: "Transform How ",
       titleHighlight1: "Talents",
       titleMid: " Prove ",
@@ -235,6 +239,7 @@ export const translations = {
     },
     trust: {
       title: "Trusted by",
+      badges: ["AI-powered", "Secure", "ISO 27001", "GDPR-ready"],
     },
     evaluation: {
       title: "Real-data based evaluation",
@@ -243,6 +248,7 @@ export const translations = {
       item1: "Dynamic skill score",
       item2: "Advanced anti-plagiarism analysis",
       item3: "Rankings by tech stacks",
+      playVideo: "Play demo video",
     },
     arena: {
       liveBanner: "• LIVE TOURNAMENTS NOW OPEN",
@@ -339,7 +345,8 @@ export const translations = {
     },
     competitiveHub: "COMPETITIVE HUB",
     hero: {
-      aiTag: "مدعوم بالذكاء الاصطناعي التوليدي",
+      aiTag: "",
+      kicker: "أثبت مهاراتك",
       title: "غيّر كيف يثبت ",
       titleHighlight1: "المواهب",
       titleMid: " ",
@@ -395,6 +402,7 @@ export const translations = {
     },
     trust: {
       title: "يثقون بنا",
+      badges: ["مدعوم بالذكاء الاصطناعي", "آمن", "ISO 27001", "متوافق مع GDPR"],
     },
     evaluation: {
       title: "تقييم مبني على البيانات الحقيقية",
@@ -403,6 +411,7 @@ export const translations = {
       item1: "درجة كفاءة ديناميكية",
       item2: "تحليل متقدم لمكافحة الانتحال",
       item3: "تصنيفات حسب المجالات التقنية",
+      playVideo: "تشغيل فيديو العرض",
     },
     arena: {
       liveBanner: "• البطولات المباشرة مفتوحة الآن",

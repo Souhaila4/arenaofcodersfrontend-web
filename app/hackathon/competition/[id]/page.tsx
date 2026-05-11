@@ -153,7 +153,10 @@ export default function CompetitionDetailsPage() {
   }, [searchQuery]);
 
   const handleJoinTeamChat = async () => {
-    if (!equipe) return;
+    if (!equipe?.id || !id) {
+      alert("Équipe ou hackathon introuvable — rechargez la page.");
+      return;
+    }
     setJoiningChat(true);
     try {
       await joinTeamChat(equipe.id, id);
@@ -441,7 +444,7 @@ export default function CompetitionDetailsPage() {
                   </p>
                   {isRunning ? (
                     <Link
-                      href={`/hackathon/room-${competition.specialty}`}
+                      href="/hackathon/room-general"
                       className="block w-full bg-cyan-500 hover:bg-cyan-400 text-black p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-center transition-all shadow-xl shadow-cyan-500/20 active:scale-95"
                     >
                       Rejoindre la salle
@@ -486,14 +489,14 @@ export default function CompetitionDetailsPage() {
                     <>
                       <button
                         onClick={() => setShowCreate(true)}
-                        disabled={!isOpen}
+                        disabled={!isOpen && !isRunning}
                         className="block w-full bg-cyan-500 hover:bg-cyan-400 text-black p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-center transition-all shadow-xl shadow-cyan-500/20 active:scale-95 disabled:opacity-50"
                       >
                         Créer une Équipe
                       </button>
                       <button
                         onClick={handleJoinSolo}
-                        disabled={!isOpen}
+                        disabled={!isOpen && !isRunning}
                         className="block w-full bg-white/[0.03] border border-white/10 hover:border-amber-500/30 hover:text-amber-400 p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-center transition-all active:scale-95 text-white/60 disabled:opacity-50"
                       >
                         Pas d&apos;équipe

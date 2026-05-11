@@ -1,8 +1,12 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import RecruitmentMeetingRoom from "./RecruitmentMeetingRoom";
+import Link from "next/link";
+import {
+  scheduleRecruitmentMeeting,
+  listMyCompanyMeetings,
+  type RecruitmentMeeting,
+} from "@/app/lib/api";
 
 interface Developer {
   id: string;
@@ -18,48 +22,51 @@ interface Developer {
   avatarUrl?: string;
 }
 
-interface RecruitmentDashboardProps {
-  developers?: Developer[];
-  onSelectDeveloper?: (developer: Developer) => void;
-}
-
-type RecruitmentView = "TALENTS" | "MEETING";
-
 const SPECIALTIES = ["FRONTEND", "BACKEND", "FULLSTACK", "MOBILE", "DATA", "DEVOPS", "DESIGN", "CYBERSECURITY", "BI"];
 
-const SPECIALTY_ICONS: Record<string, string> = {
-  FRONTEND: "🎨",
-  BACKEND: "⚙️",
-  FULLSTACK: "🚀",
-  MOBILE: "📱",
-  DATA: "📊",
-  DEVOPS: "🛠️",
-  DESIGN: "✨",
-  CYBERSECURITY: "🔒",
-  BI: "📈",
-};
-
 const SPECIALTY_GRADIENT: Record<string, string> = {
-  FRONTEND: "from-blue-600 to-blue-400",
-  BACKEND: "from-blue-600 to-blue-400",
-  FULLSTACK: "from-blue-600 to-blue-400",
-  MOBILE: "from-blue-600 to-blue-400",
-  DATA: "from-blue-600 to-blue-400",
-  DEVOPS: "from-blue-600 to-blue-400",
-  DESIGN: "from-blue-600 to-blue-400",
-  CYBERSECURITY: "from-blue-600 to-blue-400",
-  BI: "from-blue-600 to-blue-400",
+  FRONTEND: "from-cyan-500/30 to-blue-500/20",
+  BACKEND: "from-violet-500/30 to-indigo-500/20",
+  FULLSTACK: "from-emerald-500/30 to-teal-500/20",
+  MOBILE: "from-pink-500/30 to-rose-500/20",
+  DATA: "from-amber-500/30 to-orange-500/20",
+  DEVOPS: "from-sky-500/30 to-cyan-500/20",
+  DESIGN: "from-fuchsia-500/30 to-purple-500/20",
+  CYBERSECURITY: "from-red-500/30 to-rose-500/20",
+  BI: "from-yellow-500/30 to-amber-500/20",
 };
 
-export default function RecruitmentDashboard({ developers: initialDevelopers = [], onSelectDeveloper }: RecruitmentDashboardProps) {
-  const [recruitmentView, setRecruitmentView] = useState<RecruitmentView>("TALENTS");
+type RecruitmentView = "TALENTS" | "MEETINGS";
+
+export default function RecruitmentDashboard() {
+  const [view, setView] = useState<RecruitmentView>("TALENTS");
   const [searchTerm, setSearchTerm] = useState("");
   const [specialtyFilter, setSpecialtyFilter] = useState<string>("");
-  const [selectedDeveloper, setSelectedDeveloper] = useState<Developer | null>(null);
-  const [meetingCandidate, setMeetingCandidate] = useState<Developer | null>(null);
   const [sortBy, setSortBy] = useState<"avgScore" | "totalWins" | "winRate">("avgScore");
-  const [developers, setDevelopers] = useState<Developer[]>(initialDevelopers);
+  const [selectedDeveloper, setSelectedDeveloper] = useState<Developer | null>(null);
+  const [developers, setDevelopers] = useState<Developer[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Meetings tab data
+  const [meetings, setMeetings] = useState<RecruitmentMeeting[]>([]);
+  const [meetingsLoading, setMeetingsLoading] = useState(false);
+  const [meetingsError, setMeetingsError] = useState<string | null>(null);
+
+  // Schedule meeting modal
+  const [scheduleFor, setScheduleFor] = useState<Developer | null>(null);
+  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleDuration, setScheduleDuration] = useState(30);
+  const [scheduleNotes, setScheduleNotes] = useState("");
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleResult, setScheduleResult] = useState<{
+    id: string;
+    meetingLink: string;
+    candidate: { email: string; firstName: string; lastName: string };
+    scheduledFor: string;
+  } | null>(null);
+
+  // ──────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const fetchDevelopers = async () => {
@@ -80,21 +87,41 @@ export default function RecruitmentDashboard({ developers: initialDevelopers = [
     fetchDevelopers();
   }, [specialtyFilter]);
 
-  const mockDevelopers: Developer[] = [
+  const loadMeetings = async () => {
+    setMeetingsLoading(true);
+    setMeetingsError(null);
+    try {
+      const data = await listMyCompanyMeetings();
+      setMeetings(data);
+    } catch (err: any) {
+      setMeetingsError(err?.message ?? "Erreur de chargement");
+    } finally {
+      setMeetingsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (view === "MEETINGS") loadMeetings();
+  }, [view]);
+
+  const mockDevelopers: Developer[] = useMemo(() => [
     { id: "1", firstName: "Ahmed", lastName: "Mohammed", email: "ahmed@example.com", mainSpecialty: "FULLSTACK", skillTags: ["React", "Node.js", "PostgreSQL", "Docker"], totalChallenges: 45, totalWins: 32, winRate: 71, avgScore: 8.7, avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Ahmed" },
     { id: "2", firstName: "Fatima", lastName: "Al-Zahra", email: "fatima@example.com", mainSpecialty: "FRONTEND", skillTags: ["Vue.js", "Tailwind CSS", "TypeScript", "Figma"], totalChallenges: 38, totalWins: 28, winRate: 74, avgScore: 8.4, avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Fatima" },
     { id: "3", firstName: "Mohammed", lastName: "Hassan", email: "mohammed@example.com", mainSpecialty: "BACKEND", skillTags: ["Python", "FastAPI", "MongoDB", "AWS"], totalChallenges: 52, totalWins: 38, winRate: 73, avgScore: 8.9, avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Mohammed" },
     { id: "4", firstName: "Sara", lastName: "Ibrahim", email: "sara@example.com", mainSpecialty: "DATA", skillTags: ["Python", "TensorFlow", "SQL", "Tableau"], totalChallenges: 33, totalWins: 22, winRate: 67, avgScore: 8.1, avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sara" },
     { id: "5", firstName: "Karim", lastName: "Khaled", email: "karim@example.com", mainSpecialty: "DEVOPS", skillTags: ["Kubernetes", "CI/CD", "Linux", "Terraform"], totalChallenges: 28, totalWins: 21, winRate: 75, avgScore: 8.6, avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Karim" },
-  ];
+  ], []);
 
-  const displayDevelopers = developers.length > 0 ? developers : mockDevelopers;
+  const isUsingMock = developers.length === 0;
+  const displayDevelopers = isUsingMock ? mockDevelopers : developers;
+  const isValidObjectId = (s: string) => /^[a-f0-9]{24}$/i.test(s);
 
   const filteredDevelopers = useMemo(() => {
     return displayDevelopers
-      .filter((dev) => {
-        const matchSearch = `${dev.firstName} ${dev.lastName}`.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchSpecialty = !specialtyFilter || dev.mainSpecialty === specialtyFilter;
+      .filter((d) => {
+        const matchSearch = `${d.firstName} ${d.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          d.email.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchSpecialty = !specialtyFilter || d.mainSpecialty === specialtyFilter;
         return matchSearch && matchSpecialty;
       })
       .sort((a, b) => {
@@ -104,362 +131,549 @@ export default function RecruitmentDashboard({ developers: initialDevelopers = [
       });
   }, [displayDevelopers, searchTerm, specialtyFilter, sortBy]);
 
-  const stats = {
+  const stats = useMemo(() => ({
     totalDevelopers: displayDevelopers.length,
-    avgScore: (displayDevelopers.reduce((sum, dev) => sum + dev.avgScore, 0) / displayDevelopers.length).toFixed(1),
-    topSpecialty: SPECIALTIES[Math.floor(Math.random() * SPECIALTIES.length)],
-    topWinRate: Math.max(...displayDevelopers.map((d) => d.winRate)),
+    avgScore: displayDevelopers.length
+      ? (displayDevelopers.reduce((sum, d) => sum + d.avgScore, 0) / displayDevelopers.length).toFixed(1)
+      : "—",
+    topSpecialty: displayDevelopers[0]?.mainSpecialty ?? "—",
+    topWinRate: displayDevelopers.length ? Math.max(...displayDevelopers.map((d) => d.winRate)) : 0,
+  }), [displayDevelopers]);
+
+  // ─── Modal handlers ───
+
+  const openScheduleModal = (dev: Developer) => {
+    if (!isValidObjectId(dev.id)) {
+      alert(
+        "Ce profil est une donnée de démo (id non valide). Connecte de vrais utilisateurs depuis l'API analytics pour pouvoir planifier un meeting.",
+      );
+      return;
+    }
+    setScheduleFor(dev);
+    setSelectedDeveloper(null);
+    // Default: tomorrow at 10:00 local
+    const t = new Date();
+    t.setDate(t.getDate() + 1);
+    t.setHours(10, 0, 0, 0);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    setScheduleDate(`${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}T${pad(t.getHours())}:${pad(t.getMinutes())}`);
+    setScheduleDuration(30);
+    setScheduleNotes("");
+    setScheduleError(null);
+    setScheduleResult(null);
   };
 
-  return (
-    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* Hero Header with Tabs */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-gray-800/50 via-gray-800/50 to-gray-800/50 border border-gray-700 p-12 backdrop-blur-xl">
-        <div className="absolute inset-0 opacity-40">
-          <div className="absolute top-[-20%] right-[-15%] w-[500px] h-[500px] rounded-full bg-blue-500/30 blur-[150px] animate-pulse"></div>
-          <div className="absolute bottom-[-20%] left-[-15%] w-[500px] h-[500px] rounded-full bg-blue-400/20 blur-[150px]"></div>
-          <div className="absolute top-[50%] left-[50%] w-[400px] h-[400px] rounded-full bg-indigo-500/20 blur-[140px] animate-pulse" style={{animationDelay: '1s'}}></div>
-        </div>
-        <div className="relative z-10 space-y-6">
-          <div>
-            <h2 className="text-5xl font-black italic uppercase tracking-tighter">
-              <span className="bg-gradient-to-r from-blue-400 via-blue-300 to-blue-400 bg-clip-text text-transparent">Talent Pool</span>
-            </h2>
-            <p className="text-white/60 font-mono text-sm mt-2 uppercase tracking-widest">Discover Your Next Top Performer</p>
-          </div>
+  const closeScheduleModal = () => {
+    if (scheduling) return;
+    setScheduleFor(null);
+    setScheduleError(null);
+    setScheduleResult(null);
+  };
 
-          {/* Tab Navigation */}
-          <div className="flex gap-3 flex-wrap">
-            <motion.button
-              whileHover={{ scale: 1.05, translateY: -2 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => {
-                setRecruitmentView("TALENTS");
-                setMeetingCandidate(null);
-              }}
-              className={`px-6 py-3 rounded-lg font-black text-sm uppercase tracking-widest transition-all ${
-                recruitmentView === "TALENTS"
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-600/50"
-                  : "bg-white/10 text-blue-300 hover:bg-white/15 border border-blue-500/30"
-              }`}
-            >
-              Talents
-            </motion.button>
-            <motion.button
-              whileHover={{ scale: 1.05, translateY: -2 }}
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setRecruitmentView("MEETING")}
-              className={`px-6 py-3 rounded-lg font-black text-sm uppercase tracking-widest transition-all ${
-                recruitmentView === "MEETING"
-                  ? "bg-blue-600 text-white shadow-lg shadow-blue-600/50"
-                  : "bg-white/10 text-blue-300 hover:bg-white/15 border border-blue-500/30"
-              }`}
-            >
-              Meeting Room
-            </motion.button>
+  const handleSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!scheduleFor) return;
+    setScheduling(true);
+    setScheduleError(null);
+    try {
+      const iso = new Date(scheduleDate).toISOString();
+      const res = await scheduleRecruitmentMeeting({
+        candidateUserId: scheduleFor.id,
+        scheduledFor: iso,
+        durationMinutes: scheduleDuration,
+        notes: scheduleNotes.trim() || undefined,
+      });
+      setScheduleResult({
+        id: res.id,
+        meetingLink: res.meetingLink,
+        candidate: res.candidate,
+        scheduledFor: res.scheduledFor,
+      });
+    } catch (err: any) {
+      setScheduleError(err?.message ?? "Échec de la planification");
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="shrink-0 w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+            <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
           </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black tracking-[0.3em] text-cyan-400 uppercase">Recrutement</p>
+            <h2 className="mt-1 text-2xl md:text-3xl font-black italic uppercase tracking-tight text-white leading-tight">
+              Talent Pool
+            </h2>
+            <p className="mt-1 text-sm text-white/40">Découvre les top performers et planifie des entretiens.</p>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex gap-2 bg-white/5 border border-white/10 rounded-xl p-1">
+          <button
+            onClick={() => setView("TALENTS")}
+            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              view === "TALENTS" ? "bg-cyan-500 text-black shadow-lg shadow-cyan-500/20" : "text-white/50 hover:text-white"
+            }`}
+          >
+            Talents
+          </button>
+          <button
+            onClick={() => setView("MEETINGS")}
+            className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+              view === "MEETINGS" ? "bg-cyan-500 text-black shadow-lg shadow-cyan-500/20" : "text-white/50 hover:text-white"
+            }`}
+          >
+            Mes Meetings
+          </button>
         </div>
       </div>
 
-      {/* Talents View */}
-      {recruitmentView === "TALENTS" && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          className="space-y-10"
-        >
+      {view === "TALENTS" && (
+        <>
+          {isUsingMock && (
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 backdrop-blur-xl px-5 py-4 flex items-start gap-3">
+              <svg className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-black tracking-[0.3em] text-amber-400 uppercase">Mode démo</p>
+                <p className="text-sm text-white/70 mt-1 leading-relaxed">
+                  L'API <span className="font-mono text-amber-300">/api/analytics/developers</span> n'a renvoyé aucun talent — les profils ci-dessous sont des exemples.
+                  La planification de meeting est désactivée tant qu'il n'y a pas de vrais utilisateurs.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* KPIs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-            {[
-              { label: "Total Talent", value: stats.totalDevelopers, color: "from-blue-600 to-blue-400" },
-              { label: "Avg Score", value: `${stats.avgScore}/10`, color: "from-blue-600 to-blue-400" },
-              { label: "Top Specialty", value: stats.topSpecialty, color: "from-blue-600 to-blue-400" },
-              { label: "Best Win Rate", value: `${stats.topWinRate}%`, color: "from-blue-600 to-blue-400" },
-            ].map((stat, idx) => (
-              <motion.div
-                key={idx}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                whileHover={{ scale: 1.05, translateY: -5 }}
-                className={`bg-gradient-to-br ${stat.color} rounded-2xl p-6 border border-white/20 backdrop-blur-md cursor-default group overflow-hidden relative`}
-              >
-                <div className="absolute inset-0 opacity-0 group-hover:opacity-20 bg-white transition-opacity"></div>
-                <div className="relative z-10 space-y-3">
-                  <p className="text-[11px] font-black text-white/70 uppercase tracking-wider">{stat.label}</p>
-                  <p className="text-3xl font-black text-white italic">{stat.value}</p>
-                </div>
-              </motion.div>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Metric label="Total Talents" value={stats.totalDevelopers} accent="cyan" />
+            <Metric label="Score moyen" value={`${stats.avgScore} / 10`} accent="emerald" />
+            <Metric label="Top spécialité" value={stats.topSpecialty} accent="violet" />
+            <Metric label="Best win rate" value={`${stats.topWinRate}%`} accent="amber" />
           </div>
 
-          {/* Search & Filters */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="md:col-span-2">
-                <label className="text-[10px] font-black text-blue-400/80 uppercase tracking-widest block mb-3">Search</label>
-                <motion.input
-                  whileFocus={{ scale: 1.02 }}
-                  type="text"
-                  placeholder="Find by name, email..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-white/5 border border-white/15 backdrop-blur-md rounded-2xl px-5 py-3.5 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm"
+          {/* Filters */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="md:col-span-2 relative">
+              <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Chercher par nom ou email..."
+                className="w-full bg-white/5 border border-white/10 focus:border-cyan-500/50 pl-11 pr-4 py-3 rounded-xl text-sm font-mono text-white outline-none placeholder:text-white/20 transition-all"
+              />
+            </div>
+            <select
+              value={specialtyFilter}
+              onChange={(e) => setSpecialtyFilter(e.target.value)}
+              className="bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-sm text-white outline-none focus:border-cyan-500/50"
+            >
+              <option value="">Toutes spécialités</option>
+              {SPECIALTIES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-sm text-white outline-none focus:border-cyan-500/50"
+            >
+              <option value="avgScore">Tri: Score</option>
+              <option value="totalWins">Tri: Victoires</option>
+              <option value="winRate">Tri: Taux</option>
+            </select>
+          </div>
+
+          {/* Developers grid */}
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <div className="w-10 h-10 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+              <p className="text-[10px] font-black tracking-[0.3em] text-white/40 uppercase">Chargement…</p>
+            </div>
+          ) : filteredDevelopers.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-10 text-center">
+              <p className="text-white/60 font-black italic uppercase tracking-tight">Aucun talent ne correspond</p>
+              <button
+                onClick={() => { setSearchTerm(""); setSpecialtyFilter(""); }}
+                className="mt-4 inline-block px-5 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-black uppercase tracking-widest text-cyan-300 hover:bg-cyan-500/20"
+              >
+                Réinitialiser les filtres
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredDevelopers.map((dev) => (
+                <DeveloperCard
+                  key={dev.id}
+                  dev={dev}
+                  onView={() => setSelectedDeveloper(dev)}
                 />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {view === "MEETINGS" && (
+        <div className="space-y-4">
+          {meetingsLoading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <div className="w-10 h-10 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+              <p className="text-[10px] font-black tracking-[0.3em] text-white/40 uppercase">Chargement…</p>
+            </div>
+          ) : meetingsError ? (
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/5 p-6 text-center text-red-300 text-sm font-mono">
+              {meetingsError}
+            </div>
+          ) : meetings.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-10 text-center">
+              <p className="text-white/60 font-black italic uppercase tracking-tight">Aucun meeting planifié</p>
+              <p className="text-[10px] text-white/30 mt-2 uppercase tracking-widest">Va dans l'onglet Talents et clique sur Start Meeting.</p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {meetings.map((m) => (
+                <li key={m.id} className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-5 grid grid-cols-1 md:grid-cols-12 gap-3 items-center hover:border-cyan-500/20 transition-all">
+                  <div className="md:col-span-4 min-w-0">
+                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Candidat</p>
+                    <p className="text-sm font-black italic uppercase text-white truncate">{m.candidateName}</p>
+                    <p className="text-[10px] font-mono text-white/40 truncate">{m.candidateEmail}</p>
+                  </div>
+                  <div className="md:col-span-3">
+                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Programmé</p>
+                    <p className="text-sm font-mono text-cyan-300">{new Date(m.scheduledFor).toLocaleString("fr-FR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Durée</p>
+                    <p className="text-sm font-mono text-white/60">{m.durationMinutes} min</p>
+                  </div>
+                  <div className="md:col-span-1">
+                    <span className={`inline-block px-2 py-1 rounded-md text-[9px] font-black uppercase tracking-widest border ${
+                      m.status === "SCHEDULED" ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/30" :
+                      m.status === "STARTED" ? "bg-amber-500/10 text-amber-300 border-amber-500/30" :
+                      m.status === "COMPLETED" ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30" :
+                      "bg-red-500/10 text-red-300 border-red-500/30"
+                    }`}>
+                      {m.status}
+                    </span>
+                  </div>
+                  <div className="md:col-span-2 flex justify-end">
+                    <Link
+                      href={`/meeting/${m.id}`}
+                      className="px-4 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-[10px] font-black uppercase tracking-widest transition-all"
+                    >
+                      Ouvrir →
+                    </Link>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* ─── Profile detail modal (overlay) ─── */}
+      {selectedDeveloper && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[90] flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setSelectedDeveloper(null); }}
+        >
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" aria-hidden />
+          <div className="relative w-full max-w-2xl rounded-3xl border border-cyan-500/20 bg-[#0a0f1a]/95 backdrop-blur-3xl shadow-[0_0_80px_-20px_rgba(0,212,255,0.4)] overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-200">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent" aria-hidden />
+            <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-cyan-500/10 blur-[100px] pointer-events-none" aria-hidden />
+
+            <div className="relative p-7 space-y-5">
+              <div className="flex justify-between items-start gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  <img src={selectedDeveloper.avatarUrl} alt="" className={`w-14 h-14 rounded-2xl border-2 border-cyan-500/30 bg-gradient-to-br ${SPECIALTY_GRADIENT[selectedDeveloper.mainSpecialty] || "from-cyan-500/30 to-blue-500/20"} shrink-0`} />
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black tracking-[0.3em] text-cyan-400 uppercase">Profil</p>
+                    <h3 className="text-xl font-black italic uppercase text-white truncate">{selectedDeveloper.firstName} {selectedDeveloper.lastName}</h3>
+                    <p className="text-[11px] text-white/40 font-mono truncate">{selectedDeveloper.email}</p>
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest bg-cyan-500/15 text-cyan-300 border border-cyan-500/20">
+                      {selectedDeveloper.mainSpecialty}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedDeveloper(null)}
+                  className="shrink-0 w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-white/40 hover:text-white transition-all"
+                >✕</button>
               </div>
 
-              <div>
-                <label className="text-[10px] font-black text-blue-400/80 uppercase tracking-widest block mb-3">Role</label>
-                <select
-                  value={specialtyFilter}
-                  onChange={(e) => setSpecialtyFilter(e.target.value)}
-                  className="w-full bg-white/5 border border-white/15 backdrop-blur-md rounded-2xl px-5 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm"
-                >
-                  <option value="">All Roles</option>
-                  {SPECIALTIES.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  { label: "Score", value: selectedDeveloper.avgScore.toFixed(1), unit: "/10" },
+                  { label: "Challenges", value: selectedDeveloper.totalChallenges, unit: "" },
+                  { label: "Victoires", value: selectedDeveloper.totalWins, unit: "" },
+                  { label: "Win Rate", value: selectedDeveloper.winRate, unit: "%" },
+                ].map((s) => (
+                  <div key={s.label} className="rounded-xl border border-white/10 bg-white/[0.03] p-3 text-center">
+                    <p className="text-2xl font-black italic text-white">{s.value}<span className="text-sm text-white/40">{s.unit}</span></p>
+                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mt-0.5">{s.label}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Tech Stack</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedDeveloper.skillTags.map((skill) => (
+                    <span key={skill} className="px-2.5 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-[10px] font-black uppercase tracking-widest text-cyan-300">
+                      {skill}
+                    </span>
                   ))}
-                </select>
+                </div>
               </div>
 
-              <div>
-                <label className="text-[10px] font-black text-blue-400/80 uppercase tracking-widest block mb-3">Sort</label>
-                <select
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="w-full bg-white/5 border border-white/15 backdrop-blur-md rounded-2xl px-5 py-3.5 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-mono text-sm"
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => openScheduleModal(selectedDeveloper)}
+                  disabled={!isValidObjectId(selectedDeveloper.id)}
+                  title={isValidObjectId(selectedDeveloper.id) ? "Planifier un meeting" : "Profil de démo — id non valide"}
+                  className="flex-1 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black py-3 rounded-xl text-[11px] font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-cyan-500/20 disabled:bg-cyan-500/20 disabled:text-cyan-300/40 disabled:shadow-none disabled:cursor-not-allowed"
                 >
-                  <option value="avgScore">By Score</option>
-                  <option value="totalWins">By Wins</option>
-                  <option value="winRate">By Rate</option>
-                </select>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  Start Meeting
+                </button>
+                <button className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-black uppercase tracking-[0.2em] text-white/60 hover:text-white transition-all">
+                  Recruter
+                </button>
               </div>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Developers Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {loading ? (
-              <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="col-span-full flex justify-center py-12">
-                <div className="space-y-4 text-center">
-                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2 }} className="w-12 h-12 border-3 border-blue-500/30 border-t-blue-500 rounded-full mx-auto"></motion.div>
-                  <p className="text-white/40 text-sm font-mono">Loading premium talent...</p>
+      {/* ─── Schedule Meeting Modal ─── */}
+      {scheduleFor && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) closeScheduleModal(); }}
+        >
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" aria-hidden />
+          <div className="relative w-full max-w-lg rounded-3xl border border-cyan-500/20 bg-[#0a0f1a]/95 backdrop-blur-3xl shadow-[0_0_80px_-20px_rgba(0,212,255,0.4)] overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-200">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-cyan-500 to-transparent" aria-hidden />
+            <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-cyan-500/10 blur-[100px] pointer-events-none" aria-hidden />
+
+            <div className="relative p-7 space-y-5">
+              <div className="flex items-start gap-4">
+                <div className="shrink-0 w-12 h-12 rounded-2xl bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
                 </div>
-              </motion.div>
-            ) : (
-              <AnimatePresence>
-                {filteredDevelopers.map((dev, idx) => (
-                  <motion.div
-                    key={dev.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 20 }}
-                    transition={{ delay: idx * 0.05 }}
-                    whileHover={{ scale: 1.04, translateY: -8 }}
-                    onClick={() => {
-                      setSelectedDeveloper(dev);
-                      onSelectDeveloper?.(dev);
-                    }}
-                    className="cursor-pointer group"
-                  >
-                      <div className="relative bg-gradient-to-br from-blue-600 to-blue-400 rounded-3xl p-0.5 overflow-hidden shadow-xl hover:shadow-2xl transition-all">
-                      <div className="absolute inset-0 opacity-0 group-hover:opacity-30 bg-white blur pointer-events-none"></div>
-                      <div className="relative bg-[#0f172a] rounded-3xl p-4 space-y-4">
-                        <div className="flex items-start gap-2">
-                          <motion.img
-                            whileHover={{ scale: 1.1 }}
-                            src={dev.avatarUrl}
-                            alt={dev.firstName}
-                            className="w-12 h-12 rounded-xl border-2 border-white/20 flex-shrink-0"
-                          />
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                            <span className={`px-3 py-1 rounded-xl text-xs font-black text-white bg-gradient-to-r from-blue-600 to-blue-400`}>
-                              {dev.mainSpecialty}
-                            </span>
-                            </div>
-                            <h3 className="text-base font-black text-white italic">{dev.firstName} {dev.lastName}</h3>
-                            <p className="text-[10px] text-white/40 font-mono">{dev.email}</p>
-                          </div>
-                        </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black tracking-[0.3em] text-cyan-400 uppercase">Planifier un meeting</p>
+                  <h3 className="text-xl font-black italic uppercase text-white truncate">
+                    avec {scheduleFor.firstName} {scheduleFor.lastName}
+                  </h3>
+                  <p className="text-[11px] text-white/40 font-mono mt-1 break-all">{scheduleFor.email}</p>
+                </div>
+              </div>
 
-                          <div className="grid grid-cols-3 gap-2">
-                          {[
-                            { label: "Score", value: dev.avgScore.toFixed(1), unit: "/10", color: "text-blue-400" },
-                            { label: "Wins", value: dev.totalWins, unit: "", color: "text-blue-300" },
-                            { label: "Rate", value: dev.winRate, unit: "%", color: "text-blue-400" },
-                          ].map((stat) => (
-                            <div key={stat.label} className="bg-white/5 hover:bg-white/10 rounded-lg p-2 text-center transition-all border border-white/5 hover:border-white/15">
-                              <p className={`text-xl font-black italic ${stat.color}`}>{stat.value}{stat.unit}</p>
-                              <p className="text-[7px] text-white/40 uppercase tracking-wider mt-0.5 font-bold">{stat.label}</p>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="space-y-1">
-                          <p className="text-[8px] font-black text-white/50 uppercase tracking-widest">Tech Stack</p>
-                          <div className="flex flex-wrap gap-1">
-                            {dev.skillTags.slice(0, 3).map((skill) => (
-                              <span key={skill} className="text-[9px] bg-white/10 text-white/80 px-2.5 py-1 rounded-lg font-mono border border-white/10 hover:bg-white/20 transition-all">
-                                {skill}
-                              </span>
-                            ))}
-                            {dev.skillTags.length > 3 && (
-                              <span className="text-[9px] bg-blue-500/20 text-blue-300 px-2.5 py-1 rounded-lg font-bold">+{dev.skillTags.length - 3}</span>
-                            )}
-                          </div>
-                        </div>
-
-                          <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          className={`w-full bg-gradient-to-r from-blue-600 to-blue-400 text-white font-black uppercase text-xs py-2 rounded-lg transition-all shadow-lg hover:shadow-2xl border border-white/20`}
-                        >
-                          View Profile
-                        </motion.button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            )}
-          </div>
-
-          {/* Detail Modal */}
-          <AnimatePresence>
-            {selectedDeveloper && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                onClick={() => setSelectedDeveloper(null)}
-                className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-              >
-                <motion.div
-                  initial={{ scale: 0.9, opacity: 0, rotateX: -10 }}
-                  animate={{ scale: 1, opacity: 1, rotateX: 0 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                  onClick={(e) => e.stopPropagation()}
-                  className={`w-full max-w-2xl bg-gradient-to-br from-blue-600 to-blue-400 rounded-3xl p-1 overflow-hidden shadow-2xl`}
-                >
-                  <div className="bg-slate-950 rounded-3xl p-6 space-y-4 relative">
-                    <div className="flex justify-between items-start">
-                      <div className="flex items-center gap-2">
-                        <img src={selectedDeveloper.avatarUrl} alt={selectedDeveloper.firstName} className="w-14 h-14 rounded-xl border-2 border-white/30 flex-shrink-0" />
-                        <div>
-                          <h2 className="text-lg font-black text-white italic">{selectedDeveloper.firstName} {selectedDeveloper.lastName}</h2>
-                          <p className="text-[11px] text-white/50 font-mono">{selectedDeveloper.email}</p>
-                          <span className={`inline-block mt-1 px-3 py-1 rounded-lg text-xs font-black text-white bg-gradient-to-r from-blue-600 to-blue-400`}>
-                            {selectedDeveloper.mainSpecialty}
-                          </span>
-                        </div>
-                      </div>
-                      <motion.button
-                        whileHover={{ scale: 1.1, rotate: 90 }}
-                        onClick={() => setSelectedDeveloper(null)}
-                        className="text-white/40 hover:text-white transition-colors text-2xl font-bold"
-                      >
-                        ✕
-                      </motion.button>
-                    </div>
-
-                    <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {[
-                        { label: "Avg Score", value: selectedDeveloper.avgScore.toFixed(1), unit: "/10" },
-                        { label: "Challenges", value: selectedDeveloper.totalChallenges, unit: "" },
-                        { label: "Wins", value: selectedDeveloper.totalWins, unit: "" },
-                        { label: "Win Rate", value: selectedDeveloper.winRate, unit: "%" },
-                      ].map((stat) => (
-                        <motion.div key={stat.label} whileHover={{ scale: 1.08 }} className="bg-white/10 rounded-lg p-3 text-center border border-white/15 hover:border-white/25 transition-all">
-                          <p className="text-xl font-black text-white italic">{stat.value}{stat.unit}</p>
-                          <p className="text-[8px] text-white/40 uppercase tracking-wider mt-0.5 font-bold">{stat.label}</p>
-                        </motion.div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-black text-white/60 uppercase tracking-widest">Full Technology Stack</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {selectedDeveloper.skillTags.map((skill) => (
-                          <motion.span key={skill} whileHover={{ scale: 1.08, y: -2 }} className="text-[11px] bg-white/15 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-white/25 transition-all border border-white/20 cursor-default">
-                            {skill}
-                          </motion.span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2 pt-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => {
-                          setMeetingCandidate(selectedDeveloper);
-                          setSelectedDeveloper(null);
-                          setRecruitmentView("MEETING");
-                        }}
-                        className={`flex-1 bg-gradient-to-r from-blue-600 to-blue-400 text-white font-black uppercase text-xs py-2 rounded-lg transition-all shadow-lg hover:shadow-2xl border border-white/20 hover:from-blue-500 hover:to-blue-300`}
-                      >
-                        Start Meeting
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className={`flex-1 bg-gradient-to-r from-blue-600 to-blue-400 text-white font-black uppercase text-xs py-2 rounded-lg transition-all shadow-lg hover:shadow-2xl border border-white/20`}
-                      >
-                        Recruit
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        className="flex-1 bg-white/10 text-white font-black uppercase text-xs py-2 rounded-lg transition-all hover:bg-white/20 border border-white/30"
-                      >
-                        Resume
-                      </motion.button>
+              {scheduleResult ? (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 space-y-2">
+                    <p className="text-[10px] font-black tracking-[0.3em] text-emerald-400 uppercase">✓ Meeting planifié</p>
+                    <p className="text-sm text-white/80">
+                      Un email a été envoyé à <span className="font-black text-white">{scheduleResult.candidate.email}</span> avec les détails et le lien de connexion.
+                    </p>
+                    <div className="rounded-lg bg-black/40 border border-white/10 p-3">
+                      <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Lien meeting</p>
+                      <a href={scheduleResult.meetingLink} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-cyan-400 break-all hover:text-cyan-300">
+                        {scheduleResult.meetingLink}
+                      </a>
                     </div>
                   </div>
-                </motion.div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  <div className="flex gap-3">
+                    <button onClick={closeScheduleModal} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-black uppercase tracking-[0.2em] text-white/60 hover:text-white transition-all">
+                      Fermer
+                    </button>
+                    <Link
+                      href={`/meeting/${scheduleResult.id}`}
+                      className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-[11px] font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-cyan-500/30"
+                    >
+                      Ouvrir →
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleSchedule} className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-0.5">Date et heure</label>
+                    <input
+                      required
+                      type="datetime-local"
+                      value={scheduleDate}
+                      onChange={(e) => setScheduleDate(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 focus:border-cyan-500/50 p-3.5 rounded-xl text-white text-sm outline-none transition-all"
+                    />
+                  </div>
 
-          {/* Empty State */}
-          {!loading && filteredDevelopers.length === 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-20 space-y-4">
-              <p className="text-white/40 text-lg font-mono">No developers match your criteria</p>
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                onClick={() => {
-                  setSearchTerm("");
-                  setSpecialtyFilter("");
-                }}
-                className="mx-auto block bg-blue-500/20 text-blue-300 font-bold px-6 py-2 rounded-xl border border-blue-500/50 hover:bg-blue-500/30 transition-all"
-              >
-                Reset Filters
-              </motion.button>
-            </motion.div>
-          )}
-        </motion.div>
-      )}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-0.5">Durée</label>
+                    <div className="flex flex-wrap gap-2">
+                      {[15, 30, 45, 60, 90].map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => setScheduleDuration(m)}
+                          className={`px-3 py-2 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all ${
+                            scheduleDuration === m
+                              ? "bg-cyan-500/20 border-cyan-500/50 text-cyan-300"
+                              : "bg-white/5 border-white/10 text-white/40 hover:text-cyan-400 hover:border-cyan-500/30"
+                          }`}
+                        >
+                          {m} min
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-      {/* Meeting View */}
-      {recruitmentView === "MEETING" && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-        >
-          <RecruitmentMeetingRoom
-            candidateName={meetingCandidate ? `${meetingCandidate.firstName} ${meetingCandidate.lastName}` : "Candidat"}
-            onMeetingEnd={(results) => {
-              console.log("Meeting ended with results:", results);
-              setMeetingCandidate(null);
-            }}
-          />
-        </motion.div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-white/40 uppercase tracking-widest ml-0.5">Notes (optionnel)</label>
+                    <textarea
+                      rows={3}
+                      maxLength={400}
+                      value={scheduleNotes}
+                      onChange={(e) => setScheduleNotes(e.target.value)}
+                      placeholder="Sujet, agenda, lien Notion / Figma…"
+                      className="w-full bg-white/5 border border-white/10 focus:border-cyan-500/50 p-3.5 rounded-xl text-white font-mono text-sm outline-none transition-all resize-none placeholder:text-white/20"
+                    />
+                  </div>
+
+                  {scheduleError && (
+                    <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-xs font-black uppercase tracking-widest text-red-400">
+                      ✕ {scheduleError}
+                    </div>
+                  )}
+
+                  <p className="text-[10px] text-white/30 leading-relaxed">
+                    Un email avec le nom de ta company, la date/heure, et un lien de meeting sera envoyé à <span className="text-cyan-400">{scheduleFor.email}</span>.
+                  </p>
+
+                  <div className="flex gap-3 pt-1">
+                    <button type="button" onClick={closeScheduleModal} disabled={scheduling} className="flex-1 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-black uppercase tracking-[0.2em] text-white/60 hover:text-white transition-all disabled:opacity-50">
+                      Annuler
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={scheduling || !scheduleDate}
+                      className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-[11px] font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-cyan-500/30 disabled:bg-cyan-500/20 disabled:text-cyan-300/40 disabled:shadow-none disabled:cursor-not-allowed"
+                    >
+                      {scheduling ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-black/40 border-t-transparent rounded-full animate-spin" />
+                          Envoi…
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                          Envoyer l'invitation
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────
+
+function Metric({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: string | number;
+  accent: "cyan" | "emerald" | "violet" | "amber";
+}) {
+  const acc =
+    accent === "cyan" ? { text: "text-cyan-400", bg: "bg-cyan-500/10" } :
+    accent === "emerald" ? { text: "text-emerald-400", bg: "bg-emerald-500/10" } :
+    accent === "violet" ? { text: "text-violet-400", bg: "bg-violet-500/10" } :
+    { text: "text-amber-400", bg: "bg-amber-500/10" };
+  return (
+    <div className="relative p-5 rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl">
+      <div className={`absolute top-0 right-0 w-20 h-20 ${acc.bg} blur-2xl rounded-full -z-10`} />
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-2">{label}</p>
+      <p className="text-3xl font-black italic tracking-tighter text-white">{value}</p>
+      <p className={`mt-1 text-[10px] font-bold uppercase tracking-widest ${acc.text}`}>Live</p>
+    </div>
+  );
+}
+
+function DeveloperCard({ dev, onView }: { dev: Developer; onView: () => void }) {
+  return (
+    <button
+      onClick={onView}
+      className="text-left rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-5 hover:border-cyan-500/30 hover:bg-white/[0.05] transition-all group"
+    >
+      <div className="flex items-start gap-3">
+        <img
+          src={dev.avatarUrl}
+          alt=""
+          className={`w-12 h-12 rounded-xl border-2 border-cyan-500/20 bg-gradient-to-br ${SPECIALTY_GRADIENT[dev.mainSpecialty] || "from-cyan-500/30 to-blue-500/20"} group-hover:scale-105 transition-transform shrink-0`}
+        />
+        <div className="flex-1 min-w-0">
+          <span className="inline-block px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-widest bg-cyan-500/15 text-cyan-300 border border-cyan-500/20 mb-1.5">
+            {dev.mainSpecialty}
+          </span>
+          <h3 className="text-base font-black italic uppercase text-white truncate">{dev.firstName} {dev.lastName}</h3>
+          <p className="text-[10px] text-white/40 font-mono truncate">{dev.email}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 mt-4">
+        <div className="rounded-lg border border-white/5 bg-black/20 p-2 text-center">
+          <p className="text-xl font-black italic text-cyan-400">{dev.avgScore.toFixed(1)}<span className="text-[10px] text-cyan-400/60">/10</span></p>
+          <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">Score</p>
+        </div>
+        <div className="rounded-lg border border-white/5 bg-black/20 p-2 text-center">
+          <p className="text-xl font-black italic text-white">{dev.totalWins}</p>
+          <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">Wins</p>
+        </div>
+        <div className="rounded-lg border border-white/5 bg-black/20 p-2 text-center">
+          <p className="text-xl font-black italic text-emerald-400">{dev.winRate}<span className="text-[10px] text-emerald-400/60">%</span></p>
+          <p className="text-[8px] font-black text-white/30 uppercase tracking-widest">Rate</p>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1 mt-3">
+        {dev.skillTags.slice(0, 3).map((s) => (
+          <span key={s} className="text-[9px] bg-white/5 text-white/60 px-2 py-0.5 rounded-md font-mono border border-white/5">{s}</span>
+        ))}
+        {dev.skillTags.length > 3 && (
+          <span className="text-[9px] bg-cyan-500/10 text-cyan-300 px-2 py-0.5 rounded-md font-black uppercase tracking-widest">+{dev.skillTags.length - 3}</span>
+        )}
+      </div>
+
+      <div className="mt-4 inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400 group-hover:text-cyan-300">
+        Voir profil
+        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
+      </div>
+    </button>
   );
 }

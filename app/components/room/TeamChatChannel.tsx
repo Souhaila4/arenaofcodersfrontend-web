@@ -293,6 +293,14 @@ export function TeamChatChannel({ equipeId, competitionId }: TeamChatChannelProp
   useEffect(() => {
     if (!client?.userID || !equipeId || !competitionId) return;
 
+    const isObjectId = (s: string) => /^[a-f0-9]{24}$/i.test(s);
+    if (!isObjectId(equipeId) || !isObjectId(competitionId)) {
+      setError(
+        `URL invalide (equipeId="${equipeId}", competitionId="${competitionId}"). Retournez à la page du hackathon et cliquez à nouveau sur le chat d'équipe.`,
+      );
+      return;
+    }
+
     const safeEquipe = equipeId.replace(/[^a-z0-9-_]/gi, "");
     const safeComp = competitionId.replace(/[^a-z0-9-_]/gi, "");
     const channelId = `team-${safeEquipe}-comp-${safeComp}`;

@@ -27,7 +27,20 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen text-white font-sans relative overflow-x-hidden">
+    <div className="min-h-screen text-[var(--text-primary)] font-sans relative overflow-x-hidden">
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden" aria-hidden>
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(0,212,255,0.12),transparent)]" />
+        <div className="absolute top-[20vh] left-[10%] h-[min(60vw,420px)] w-[min(60vw,420px)] rounded-full bg-[var(--accent)]/[0.06] blur-3xl" />
+        <div className="absolute bottom-[10%] right-[5%] h-[min(50vw,360px)] w-[min(50vw,360px)] rounded-full bg-[var(--accent-violet)]/[0.07] blur-3xl" />
+        <div
+          className="absolute inset-0 opacity-[0.04]"
+          style={{
+            backgroundImage: `linear-gradient(rgba(148,163,184,0.4) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.4) 1px, transparent 1px)`,
+            backgroundSize: "48px 48px",
+          }}
+        />
+      </div>
+
       {/* Contrôles Zoom */}
       <div
         className="fixed bottom-6 right-6 z-50 flex items-stretch rounded-lg overflow-hidden glass border border-white/10 shadow-lg"
@@ -59,6 +72,7 @@ export default function Home() {
       <HeroSection
         user={user}
         aiTag={t.hero.aiTag}
+        kicker={t.hero.kicker}
         title={t.hero.title}
         titleHighlight1={t.hero.titleHighlight1}
         titleMid={t.hero.titleMid}
@@ -82,12 +96,12 @@ export default function Home() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.1 }}
-              className="rounded-2xl border border-white/10 glass p-6 flex flex-col gap-3 hover:border-[var(--accent)]/30 transition-colors"
+              className="rounded-2xl border border-white/10 glass p-6 flex flex-col gap-3 hover:border-[var(--accent)]/35 transition-colors shadow-sm"
             >
               <div className="w-10 h-10 rounded-xl bg-[var(--accent)]/20 flex items-center justify-center text-[var(--accent)]">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={stat.icon} /></svg>
               </div>
-              <span className="text-3xl font-bold text-white">{stat.value}</span>
+              <span className="text-3xl font-bold text-[var(--text-primary)] tracking-tight">{stat.value}</span>
               <span className="text-[var(--text-secondary)]">{stat.label}</span>
             </motion.div>
           ))}
@@ -108,7 +122,7 @@ export default function Home() {
       {/* Comment ça marche */}
       <section id="how" className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 py-20 border-t border-white/10">
         <SectionTitle number="02" title={t.howItWorks.title} subtitle={t.howItWorks.subtitle} align="center" />
-        <div className="mt-16 grid grid-cols-1 md:grid-cols-5 gap-8">
+        <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-10 xl:gap-6">
           {[
             { title: t.howItWorks.step1.title, desc: t.howItWorks.step1.desc, num: "1" },
             { title: t.howItWorks.step2.title, desc: t.howItWorks.step2.desc, num: "2" },
@@ -128,11 +142,11 @@ export default function Home() {
                 <div className="w-14 h-14 rounded-xl border border-[var(--accent)]/40 bg-[var(--accent)]/10 flex items-center justify-center text-[var(--accent)] font-bold text-lg mb-4">
                   {step.num}
                 </div>
-                <h4 className="text-lg font-bold text-white">{step.title}</h4>
-                <p className="mt-2 text-sm text-[var(--text-secondary)]">{step.desc}</p>
+                <h4 className="text-lg font-bold text-[var(--text-primary)]">{step.title}</h4>
+                <p className="mt-2 text-sm text-[var(--text-secondary)] leading-relaxed">{step.desc}</p>
               </div>
               {i < 4 && (
-                <div className="hidden md:block absolute top-7 left-[60%] w-[80%] h-px bg-gradient-to-r from-[var(--accent)]/50 to-transparent" />
+                <div className="hidden xl:block absolute top-7 left-[calc(50%+1.75rem)] w-[calc(100%-3.5rem)] max-w-[120px] h-px bg-gradient-to-r from-[var(--accent)]/50 to-transparent" />
               )}
             </motion.div>
           ))}
@@ -166,15 +180,15 @@ export default function Home() {
         >
           {t.trust.title}
         </motion.h2>
-        <div className="flex flex-wrap justify-center gap-12 items-center opacity-60">
-          {["Powered by AI", "Secure", "ISO 27001", "GDPR"].map((badge, i) => (
+        <div className="flex flex-wrap justify-center gap-4 sm:gap-8 items-center">
+          {t.trust.badges.map((badge, i) => (
             <motion.span
-              key={i}
+              key={badge}
               initial={{ opacity: 0 }}
-              whileInView={{ opacity: 0.6 }}
+              whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              className="px-6 py-3 rounded-full border border-white/20 text-sm font-mono text-[var(--text-secondary)] hover:border-[var(--accent)]/50 hover:text-[var(--accent)] transition-colors"
+              transition={{ delay: i * 0.08 }}
+              className="px-5 py-2.5 rounded-full border border-[var(--glass-border)] bg-[var(--card)]/50 text-sm font-mono text-[var(--text-secondary)] hover:border-[var(--accent)]/40 hover:text-[var(--accent)] transition-colors"
             >
               {badge}
             </motion.span>
@@ -198,9 +212,9 @@ export default function Home() {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="text-center rounded-3xl border border-[var(--accent)]/30 bg-gradient-to-b from-[var(--accent)]/10 to-transparent p-16"
+          className="text-center rounded-3xl border border-[var(--accent)]/30 bg-gradient-to-b from-[var(--accent)]/10 to-transparent p-12 md:p-16 shadow-[0_0_60px_-12px_rgba(0,212,255,0.15)]"
         >
-          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white">
+          <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-[var(--text-primary)]">
             {t.cta.title}
           </h2>
           <p className="mt-4 text-[var(--text-secondary)] text-lg">
@@ -218,11 +232,11 @@ export default function Home() {
       <section id="demo" className="relative z-10 max-w-7xl mx-auto px-6 md:px-12 py-20 border-t border-white/10">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <div>
-            <h2 className="text-2xl md:text-3xl font-bold text-white">{t.evaluation.title}</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-[var(--text-primary)]">{t.evaluation.title}</h2>
             <p className="mt-4 text-[var(--text-secondary)] leading-relaxed">{t.evaluation.description}</p>
             <ul className="mt-6 space-y-3">
               {[t.evaluation.item1, t.evaluation.item2, t.evaluation.item3].map((label, i) => (
-                <li key={i} className="flex items-center gap-3 text-white">
+                <li key={i} className="flex items-center gap-3 text-[var(--text-primary)]">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-[var(--accent)]/20 flex items-center justify-center text-[var(--accent)]">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                   </span>
@@ -233,7 +247,7 @@ export default function Home() {
           </div>
           <div className="relative">
             <div className="aspect-video rounded-2xl border border-white/10 glass flex items-center justify-center overflow-hidden">
-              <button type="button" className="w-20 h-20 rounded-full bg-[var(--accent)]/20 hover:bg-[var(--accent)]/30 flex items-center justify-center text-[var(--accent)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" aria-label="Lire la vidéo">
+              <button type="button" className="w-20 h-20 rounded-full bg-[var(--accent)]/20 hover:bg-[var(--accent)]/30 flex items-center justify-center text-[var(--accent)] transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--accent)]" aria-label={t.evaluation.playVideo}>
                 <svg className="w-10 h-10 ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
               </button>
             </div>

@@ -333,13 +333,12 @@ export default function UserDashboardPage() {
                    type="GLOBAL"
                    onClick={() => router.push("/hackathon/arena-live")}
                 />
-                <CommunityCard 
-                   title={`Hub ${user?.mainSpecialty || 'Exploration'}`}
-                   desc={`Espace privé réservé aux profils ${user?.mainSpecialty || 'sans spécialité'}. Échangez sur votre stack.`}
+                <CommunityCard
+                   title="Salle Générale"
+                   desc="Espace commun à tous les membres : chat, visio, partage d'écran."
                    type="SPECIALTY"
                    highlight={user?.mainSpecialty}
-                   onClick={() => router.push(`/hackathon/room-${user?.mainSpecialty}`)}
-                   disabled={!user?.mainSpecialty}
+                   onClick={() => router.push(`/hackathon/room-general`)}
                 />
              </div>
           ) : (
@@ -541,8 +540,8 @@ function CompetitionCard({ competition: c, isJoined, equipe, onCreateEquipe, onJ
                      Détails
                   </Link>
                   {isRunning && (
-                    <Link 
-                      href={`/hackathon/room-${c.specialty}`} 
+                    <Link
+                      href="/hackathon/room-general"
                       className="px-8 py-4 rounded-3xl bg-cyan-500 text-black text-[11px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-all shadow-xl shadow-cyan-500/20 active:scale-95"
                     >
                        ENTRER

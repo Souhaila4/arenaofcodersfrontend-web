@@ -352,6 +352,60 @@ export async function generateCertificate(
   return res as CertificateResult;
 }
 
+/** Admin: mint un certificat pour un utilisateur identifié par userId OU email. */
+export async function adminGenerateCertificate(payload: {
+  userId?: string;
+  email?: string;
+  hackathonName: string;
+}): Promise<CertificateResult & { certificateId: string; transferredToWallet?: boolean; recipientAccountId?: string | null; note?: string }> {
+  const res = await request('/certificate/admin/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res as CertificateResult & {
+    certificateId: string;
+    transferredToWallet?: boolean;
+    recipientAccountId?: string | null;
+    note?: string;
+  };
+}
+
+export type AdminCertificate = {
+  id: string;
+  hackathonName: string;
+  tokenId: string;
+  serial: number;
+  imageIpfsUrl: string;
+  metadataUrl: string;
+  transferredToWallet: boolean;
+  recipientAccountId: string | null;
+  mintedAt: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    hederaAccountId: string | null;
+    avatarUrl: string | null;
+  };
+};
+
+/** Admin: liste tous les certificats NFT émis. */
+export async function adminListCertificates(opts?: {
+  limit?: number;
+  q?: string;
+}): Promise<{ total: number; certificates: AdminCertificate[] }> {
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  if (opts?.q?.trim()) params.set('q', opts.q.trim());
+  const qs = params.toString();
+  const res = await request(`/certificate/admin/list${qs ? `?${qs}` : ''}`, {
+    method: 'GET',
+  });
+  return res as { total: number; certificates: AdminCertificate[] };
+}
+
 // ─────────────────────────────────────────────────────────────────
 // COMPETITIONS / HACKATHONS
 // ─────────────────────────────────────────────────────────────────
@@ -454,6 +508,14 @@ export async function changeCompetitionStatus(
     body: JSON.stringify({ status }),
   });
   return res as Competition;
+}
+
+/** Supprime un hackathon (admin / company). Restitue l'escrow non distribué le cas échéant. */
+export async function deleteCompetition(
+  id: string,
+): Promise<{ success: boolean; deletedId: string; refundedAmount: number }> {
+  const res = await request(`/competitions/${id}`, { method: 'DELETE' });
+  return res as { success: boolean; deletedId: string; refundedAmount: number };
 }
 
 /** Rejoindre une compétition (utilisateur connecté). */
@@ -786,4 +848,94 @@ export async function joinTeamChat(
     },
   );
   return res as { ok: boolean };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RECRUITMENT MEETING
+// ─────────────────────────────────────────────────────────────────
+
+export type RecruitmentMeetingStatus = 'SCHEDULED' | 'STARTED' | 'COMPLETED' | 'CANCELLED';
+
+export type RecruitmentMeeting = {
+  id: string;
+  companyName: string;
+  companyUserId: string;
+  candidateUserId: string;
+  candidateName: string;
+  candidateEmail: string;
+  scheduledFor: string;
+  durationMinutes: number;
+  notes?: string | null;
+  status: RecruitmentMeetingStatus;
+  softSkillsScore?: Record<string, number> | null;
+  company?: { id: string; firstName: string; lastName: string; email: string } | null;
+  candidate?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    mainSpecialty?: string | null;
+    avatarUrl?: string | null;
+  } | null;
+  role?: 'COMPANY' | 'CANDIDATE';
+};
+
+export async function scheduleRecruitmentMeeting(payload: {
+  candidateUserId: string;
+  scheduledFor: string;
+  durationMinutes?: number;
+  notes?: string;
+}): Promise<{
+  id: string;
+  meetingLink: string;
+  companyName: string;
+  candidate: { id: string; email: string; firstName: string; lastName: string };
+  scheduledFor: string;
+  durationMinutes: number;
+  notes?: string | null;
+  status: RecruitmentMeetingStatus;
+}> {
+  const res = await request('/recruitment-meeting', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return res as any;
+}
+
+export async function getRecruitmentMeeting(id: string): Promise<RecruitmentMeeting> {
+  const res = await request(`/recruitment-meeting/${encodeURIComponent(id)}`, { method: 'GET' });
+  return res as unknown as RecruitmentMeeting;
+}
+
+export async function listMyCompanyMeetings(): Promise<RecruitmentMeeting[]> {
+  const res = await request('/recruitment-meeting/my/company', { method: 'GET' });
+  return res as unknown as RecruitmentMeeting[];
+}
+
+export async function listMyCandidateMeetings(): Promise<RecruitmentMeeting[]> {
+  const res = await request('/recruitment-meeting/my/candidate', { method: 'GET' });
+  return res as unknown as RecruitmentMeeting[];
+}
+
+export async function markMeetingStarted(id: string): Promise<{ id: string; status: RecruitmentMeetingStatus }> {
+  const res = await request(`/recruitment-meeting/${encodeURIComponent(id)}/start`, { method: 'PATCH' });
+  return res as any;
+}
+
+export async function completeMeeting(
+  id: string,
+  softSkillsScore?: Record<string, number>,
+): Promise<{ id: string; status: RecruitmentMeetingStatus; softSkillsScore: Record<string, number> | null }> {
+  const res = await request(`/recruitment-meeting/${encodeURIComponent(id)}/complete`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(softSkillsScore ? { softSkillsScore } : {}),
+  });
+  return res as any;
+}
+
+export async function cancelMeeting(id: string): Promise<{ id: string; status: RecruitmentMeetingStatus }> {
+  const res = await request(`/recruitment-meeting/${encodeURIComponent(id)}/cancel`, { method: 'PATCH' });
+  return res as any;
 }

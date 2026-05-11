@@ -5,27 +5,33 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import PlatformNavbar from "../components/PlatformNavbar";
 import RecruitmentDashboard from "../components/company/RecruitmentDashboard";
+import CreateHackathonModal from "../components/dashboard/CreateHackathonModal";
 import {
   getToken,
   getProfile,
   getCompetitions,
   createCompetition,
   changeCompetitionStatus,
+  deleteCompetition,
   type Competition,
   type CompetitionStatus,
-  type Specialty,
   type CreateCompetitionPayload,
 } from "../lib/api";
 
-const PAGE_SIZE = 10;
+type View = "OVERVIEW" | "MY_HACKATHONS" | "RECRUITMENT";
 
-type View = "OVERVIEW" | "MY_HACKATHONS" | "CREATE" | "RECRUITMENT";
+type ProfileLite = {
+  id?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+};
 
 export default function CompanyDashboardPage() {
   const router = useRouter();
   const [activeView, setActiveView] = useState<View>("OVERVIEW");
-  const [user, setUser] = useState<any>(null);
-  
+  const [user, setUser] = useState<ProfileLite | null>(null);
+
   // Data
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +44,8 @@ export default function CompanyDashboardPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
 
-  // Create Form
+  // Create modal
+  const [showCreate, setShowCreate] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [compForm, setCompForm] = useState<CreateCompetitionPayload>({
     title: "",
@@ -54,6 +61,15 @@ export default function CompanyDashboardPage() {
     topN: 5,
   });
 
+  // Delete modal (two-step, themed — same UX as admin)
+  const [deleteTarget, setDeleteTarget] = useState<Competition | null>(null);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteResultMsg, setDeleteResultMsg] = useState<string | null>(null);
+
+  // ─────────────────────────────────────────────────────────────────
+
   useEffect(() => {
     const token = getToken();
     if (!token) {
@@ -62,7 +78,7 @@ export default function CompanyDashboardPage() {
     }
     setLoading(true);
     getProfile()
-      .then((profile: any) => {
+      .then((profile: ProfileLite) => {
         if (profile?.role !== "COMPANY" && profile?.role !== "ADMIN") {
           router.push("/hackathon");
           return;
@@ -74,7 +90,6 @@ export default function CompanyDashboardPage() {
       .finally(() => setLoading(false));
   }, [router]);
 
-  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchTerm), 500);
     return () => clearTimeout(timer);
@@ -83,7 +98,6 @@ export default function CompanyDashboardPage() {
   const loadCompetitions = async () => {
     setCompLoading(true);
     try {
-      // Backend automatically filters by company for COMPANY role
       const res = await getCompetitions({ limit: 100 });
       setCompetitions(res.data ?? []);
     } catch (err: any) {
@@ -93,6 +107,21 @@ export default function CompanyDashboardPage() {
     }
   };
 
+  const resetCreateForm = () =>
+    setCompForm({
+      title: "",
+      description: "",
+      difficulty: "MEDIUM",
+      specialty: undefined,
+      startDate: "",
+      endDate: "",
+      rewardPool: 0,
+      maxParticipants: undefined,
+      antiCheatEnabled: false,
+      antiCheatThreshold: 70,
+      topN: 5,
+    });
+
   const handleCreateCompetition = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateLoading(true);
@@ -101,20 +130,9 @@ export default function CompanyDashboardPage() {
     try {
       await createCompetition(compForm);
       setCompSuccess("Hackathon créé avec succès");
-      setCompForm({
-        title: "",
-        description: "",
-        difficulty: "MEDIUM",
-        specialty: undefined,
-        startDate: "",
-        endDate: "",
-        rewardPool: 0,
-        maxParticipants: undefined,
-        antiCheatEnabled: false,
-        antiCheatThreshold: 70,
-        topN: 5,
-      });
-      loadCompetitions();
+      setShowCreate(false);
+      resetCreateForm();
+      await loadCompetitions();
       setActiveView("MY_HACKATHONS");
     } catch (err: any) {
       setError(err?.message ?? "Erreur de création");
@@ -126,13 +144,48 @@ export default function CompanyDashboardPage() {
   const handleStatusChange = async (id: string, newStatus: CompetitionStatus) => {
     try {
       await changeCompetitionStatus(id, newStatus);
-      loadCompetitions();
+      await loadCompetitions();
     } catch (err: any) {
       alert(err?.message ?? "Erreur");
     }
   };
 
-  const filteredCompetitions = competitions.filter(c => {
+  // ─── Delete flow ───
+  const openDeleteModal = (c: Competition) => {
+    setDeleteTarget(c);
+    setDeleteStep(1);
+    setDeleteConfirmText("");
+    setDeleteResultMsg(null);
+  };
+  const closeDeleteModal = () => {
+    if (deleting) return;
+    setDeleteTarget(null);
+    setDeleteStep(1);
+    setDeleteConfirmText("");
+    setDeleteResultMsg(null);
+  };
+  const confirmDeleteCompetition = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteResultMsg(null);
+    try {
+      const res = await deleteCompetition(deleteTarget.id);
+      setCompetitions((prev) => prev.filter((x) => x.id !== deleteTarget.id));
+      setDeleteResultMsg(
+        res.refundedAmount > 0
+          ? `Hackathon supprimé. ${res.refundedAmount} ARENA restitués.`
+          : `Hackathon supprimé.`,
+      );
+      setTimeout(() => closeDeleteModal(), 1400);
+    } catch (err: any) {
+      setDeleteResultMsg("Suppression impossible : " + (err?.message ?? "erreur inconnue"));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  // ─── Derived ───
+  const filteredCompetitions = competitions.filter((c) => {
     const matchesSearch = c.title.toLowerCase().includes(debouncedSearch.toLowerCase());
     const matchesStatus = !statusFilter || c.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -140,218 +193,266 @@ export default function CompanyDashboardPage() {
 
   const stats = {
     total: competitions.length,
-    active: competitions.filter(c => ["OPEN_FOR_ENTRY", "RUNNING", "EVALUATING"].includes(c.status)).length,
+    active: competitions.filter((c) => ["OPEN_FOR_ENTRY", "RUNNING", "EVALUATING"].includes(c.status)).length,
     participants: competitions.reduce((acc, c) => acc + (c._count?.participants || 0), 0),
-    completed: competitions.filter(c => c.status === "COMPLETED").length,
+    completed: competitions.filter((c) => c.status === "COMPLETED").length,
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#05080f] flex flex-col">
+      <div className="min-h-screen flex flex-col">
         <PlatformNavbar />
-        <div className="flex-1 flex flex-col items-center justify-center">
-          <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-blue-400 font-mono text-xs mt-6 tracking-[0.2em] uppercase">Chargement en cours...</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4">
+          <div className="w-12 h-12 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin"></div>
+          <p className="text-[10px] font-black tracking-[0.3em] text-white/40 uppercase">Chargement…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#05080f] text-white flex flex-col selection:bg-blue-500/30">
+    <div className="min-h-screen text-white flex flex-col font-sans selection:bg-cyan-500/30 relative">
       <PlatformNavbar />
 
       <div className="flex flex-1 overflow-hidden">
         {/* SIDEBAR */}
-        <aside className="w-72 border-r border-white/5 bg-[#0a0f18] hidden lg:flex flex-col p-8 gap-10">
-          <div className="space-y-8">
-            <div className="px-2">
-              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-[0.2em] mb-1">Utilisateur</p>
-              <h2 className="text-lg font-bold text-white truncate">{user?.firstName} {user?.lastName}</h2>
-              <p className="text-[9px] text-gray-400 font-mono">ID: {user?.id?.slice(-8)}</p>
-            </div>
+        <aside className="w-64 border-r border-white/5 bg-[#0d1117]/80 backdrop-blur-xl hidden md:flex flex-col p-6 gap-8 shrink-0">
+          <div className="space-y-2 px-2">
+            <p className="text-[10px] font-black text-cyan-400 uppercase tracking-[0.2em]">Entreprise</p>
+            <h2 className="text-lg font-black italic uppercase text-white truncate">
+              {user?.firstName} {user?.lastName}
+            </h2>
+            <p className="text-[9px] text-white/30 font-mono">ID: {user?.id?.slice(-8)}</p>
+          </div>
 
-            <nav className="space-y-2">
-              <SidebarItem 
-                icon="A"
-                label="Centre d'Analyse" active={activeView === "OVERVIEW"} onClick={() => setActiveView("OVERVIEW")} 
+          <div className="space-y-6">
+            <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.2em] px-2">Navigation</p>
+            <nav className="space-y-1">
+              <SidebarItem
+                icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>}
+                label="Vue d'ensemble"
+                active={activeView === "OVERVIEW"}
+                onClick={() => setActiveView("OVERVIEW")}
               />
-              <SidebarItem 
-                icon="H"
-                label="Mes Hackathons" active={activeView === "MY_HACKATHONS"} onClick={() => setActiveView("MY_HACKATHONS")} 
+              <SidebarItem
+                icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>}
+                label="Mes Hackathons"
+                active={activeView === "MY_HACKATHONS"}
+                onClick={() => setActiveView("MY_HACKATHONS")}
               />
-              <SidebarItem 
-                icon="+"
-                label="Nouvel Event" active={activeView === "CREATE"} onClick={() => setActiveView("CREATE")} 
-              />
-              <SidebarItem 
-                icon="R"
-                label="Recrutement" active={activeView === "RECRUITMENT"} onClick={() => setActiveView("RECRUITMENT")} 
+              <SidebarItem
+                icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>}
+                label="Recrutement"
+                active={activeView === "RECRUITMENT"}
+                onClick={() => setActiveView("RECRUITMENT")}
               />
             </nav>
           </div>
 
-          <div className="mt-auto p-6 bg-blue-600/10 rounded-lg border border-blue-600/20 space-y-4">
+          <div className="mt-auto p-4 bg-cyan-500/5 rounded-2xl border border-cyan-500/10 space-y-2 backdrop-blur-xl">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-              <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Mode Entreprise</p>
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+              <p className="text-[10px] font-black text-cyan-400 uppercase tracking-widest">Mode Entreprise</p>
             </div>
-            <p className="text-[10px] text-gray-400 leading-relaxed font-mono">
-              Accès illimité à la création d'événements et à la gestion des talents.
+            <p className="text-[10px] text-white/40 leading-relaxed font-mono">
+              Création illimitée d'événements et accès au pool de talents.
             </p>
           </div>
         </aside>
 
-        {/* MAIN CONTENT */}
-        <main className="flex-1 overflow-auto p-6 lg:p-12">
+        {/* MAIN */}
+        <main className="flex-1 overflow-auto p-6 lg:p-12 relative z-10">
           {/* Header */}
-          <div className="mb-12 flex justify-between items-start">
+          <div className="mb-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="text-4xl font-bold text-white">
-                Tableau de Bord Entreprise
+              <h1 className="text-3xl font-black italic uppercase tracking-tighter text-white">
+                Company <span className="text-cyan-400">Control</span> Panel
               </h1>
-              <p className="text-[10px] text-gray-400 tracking-wider uppercase mt-2">Arena of Coders - Gestion d'entreprise</p>
+              <p className="text-[10px] text-white/30 tracking-[0.4em] uppercase mt-2">Arena of Coders · Espace Entreprise</p>
             </div>
-            <button 
-              onClick={() => setActiveView("CREATE")}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-2xl font-black uppercase text-xs tracking-widest transition-all shadow-xl shadow-blue-600/20 active:scale-95"
+            <button
+              onClick={() => { setShowCreate(true); setError(null); setCompSuccess(null); }}
+              className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-400 text-black px-6 py-3 rounded-xl font-black text-[10px] transition-all uppercase tracking-widest shadow-lg shadow-cyan-500/20 whitespace-nowrap"
             >
-              + Launch Event
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
+              CRÉER HACKATHON
             </button>
           </div>
 
+          {compSuccess && (
+            <div className="mb-6 rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 text-xs font-black uppercase tracking-widest text-emerald-300 animate-in slide-in-from-top-2 fade-in">
+              ✓ {compSuccess}
+            </div>
+          )}
+
+          {/* ─── OVERVIEW ─── */}
           {activeView === "OVERVIEW" && (
-            <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-              {/* Metrics */}
+            <div className="space-y-10 animate-in fade-in duration-500">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <MetricCard label="Total Events" value={stats.total} subValue="Historique complet" />
-                <MetricCard label="In Progress" value={stats.active} subValue="Actions requises" />
-                <MetricCard label="Talents Reached" value={stats.participants} subValue="Inscriptions uniques" />
-                <MetricCard label="Finished" value={stats.completed} subValue="Challenges clos" />
+                <MetricCard label="Total Events" value={stats.total} subValue="Historique complet" color="cyan" />
+                <MetricCard label="Actifs" value={stats.active} subValue="En cours" color="emerald" />
+                <MetricCard label="Talents Réunis" value={stats.participants} subValue="Inscriptions" color="amber" />
+                <MetricCard label="Terminés" value={stats.completed} subValue="Challenges clos" color="violet" />
               </div>
 
-              {/* Recent Activity Mockup or List */}
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                 <div className="xl:col-span-2 space-y-6">
                   <SectionTitle title="État de vos Hackathons" />
-                  <div className="grid grid-cols-1 gap-4">
-                    {competitions.slice(0, 3).map(c => (
-                      <div key={c.id} className="bg-white/[0.02] border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/[0.04] transition-all">
-                        <div className="space-y-1">
-                          <div className="flex gap-2 items-center">
-                            <span className={`px-2 py-0.5 rounded-[4px] text-[8px] font-black uppercase tracking-widest ${STATUS_COLOR[c.status] || 'bg-gray-700/50 text-gray-300'}`}>
-                              {c.status}
-                            </span>
-                            <span className="text-[8px] text-blue-400 font-bold uppercase tracking-widest">{c.specialty}</span>
-                          </div>
-                          <h3 className="text-lg font-black italic uppercase text-white truncate max-w-[300px]">{c.title}</h3>
-                        </div>
-                        <div className="flex flex-col items-end gap-1">
-                           <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Participants</p>
-                           <p className="text-xl font-black text-white">{c._count?.participants || 0}</p>
-                        </div>
+                  <div className="space-y-3">
+                    {competitions.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-10 text-center">
+                        <p className="text-white/60 font-black italic uppercase tracking-tight">Aucun hackathon créé pour l'instant</p>
+                        <p className="text-[10px] text-white/30 mt-2 uppercase tracking-widest">Clique sur « Créer hackathon » pour démarrer.</p>
                       </div>
-                    ))}
+                    ) : (
+                      competitions.slice(0, 4).map((c) => (
+                        <div
+                          key={c.id}
+                          className="bg-white/[0.03] border border-white/10 backdrop-blur-xl p-5 rounded-2xl flex items-center justify-between gap-4 hover:bg-white/[0.06] hover:border-cyan-500/20 transition-all"
+                        >
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex gap-2 items-center">
+                              <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${STATUS_COLOR[c.status] || "bg-white/10 text-white/60"}`}>
+                                {c.status}
+                              </span>
+                              <span className="text-[8px] border border-cyan-500/30 text-cyan-400 px-2 py-0.5 rounded font-black uppercase tracking-widest">{c.specialty}</span>
+                            </div>
+                            <h3 className="text-base font-black italic uppercase text-white truncate">{c.title}</h3>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Participants</p>
+                            <p className="text-xl font-black text-white">{c._count?.participants || 0}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
-                  {competitions.length > 3 && (
-                    <button onClick={() => setActiveView("MY_HACKATHONS")} className="text-xs font-black text-blue-500 uppercase tracking-widest hover:text-blue-400 transition-all flex items-center gap-2">
-                       Voir tous vos hackathons →
+                  {competitions.length > 4 && (
+                    <button
+                      onClick={() => setActiveView("MY_HACKATHONS")}
+                      className="text-xs font-black text-cyan-400 uppercase tracking-widest hover:text-cyan-300 transition-all inline-flex items-center gap-2"
+                    >
+                      Voir tous vos hackathons
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
                     </button>
                   )}
                 </div>
 
                 <div className="space-y-6">
-                    <SectionTitle title="Statistiques Talents" />
-                    <div className="p-8 rounded-3xl bg-gray-800/30 border border-gray-700 space-y-6">
-                        <div className="space-y-2">
-                            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Engagements Actifs</p>
-                            <div className="h-2 w-full bg-gray-700/50 rounded-full overflow-hidden">
-                                <div className="h-full bg-blue-600 w-3/4 rounded-full"></div>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <p className="text-2xl font-black italic text-white">{stats.participants}</p>
-                                <p className="text-[8px] font-bold text-white/20 uppercase">Inscrits</p>
-                            </div>
-                            <div>
-                                <p className="text-2xl font-black italic text-white text-right">86%</p>
-                                <p className="text-[8px] font-bold text-white/20 uppercase text-right">Remplissage</p>
-                            </div>
-                        </div>
+                  <SectionTitle title="Statistiques Talents" />
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-6 space-y-5">
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Engagements actifs</p>
+                      <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-full bg-cyan-500/70 rounded-full transition-all duration-1000" style={{ width: `${stats.total ? Math.min(100, (stats.active / Math.max(1, stats.total)) * 100) : 0}%` }} />
+                      </div>
+                      <p className="text-[9px] font-mono text-white/30">
+                        {stats.active} / {stats.total} hackathons actifs
+                      </p>
                     </div>
+                    <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/5">
+                      <div>
+                        <p className="text-2xl font-black italic text-white">{stats.participants}</p>
+                        <p className="text-[8px] font-black text-white/20 uppercase tracking-widest mt-1">Inscrits</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-black italic text-cyan-400">{stats.completed}</p>
+                        <p className="text-[8px] font-black text-white/20 uppercase tracking-widest mt-1">Complétés</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           )}
 
+          {/* ─── MY HACKATHONS ─── */}
           {activeView === "MY_HACKATHONS" && (
-            <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-               <div className="flex flex-col md:flex-row gap-4 items-center">
+            <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+              <div className="flex flex-col md:flex-row gap-4">
                 <div className="relative flex-1">
-                  <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-                  <input 
+                  <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                  <input
                     placeholder="Chercher parmi vos hackathons..."
                     value={searchTerm}
-                    onChange={e => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-800/50 border border-gray-700 pl-12 pr-4 py-4 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 transition-all font-mono text-white"
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 pl-12 pr-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 transition-all font-mono text-white placeholder:text-white/20"
                   />
                 </div>
-                <select 
+                <select
                   value={statusFilter}
-                  onChange={e => setStatusFilter(e.target.value)}
-                  className="bg-gray-800/50 border border-gray-700 px-6 py-4 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-blue-600 outline-none min-w-[200px] text-white"
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-white/5 border border-white/10 px-4 py-3 rounded-xl text-sm focus:outline-none focus:ring-1 focus:ring-cyan-500 outline-none min-w-[180px] text-white"
                 >
                   <option value="">Tous les statuts</option>
                   <option value="OPEN_FOR_ENTRY">Ouvert</option>
                   <option value="RUNNING">En cours</option>
                   <option value="EVALUATING">Évaluation</option>
                   <option value="COMPLETED">Terminé</option>
+                  <option value="ARCHIVED">Archivé</option>
                 </select>
               </div>
 
               {compLoading ? (
-                <div className="py-20 text-center font-mono opacity-40 uppercase tracking-widest text-xs animate-pulse">Chargement en cours...</div>
+                <div className="flex flex-col items-center justify-center py-20 gap-3">
+                  <div className="w-8 h-8 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+                  <p className="text-[10px] font-black tracking-[0.3em] text-white/40 uppercase">Chargement…</p>
+                </div>
               ) : filteredCompetitions.length === 0 ? (
-                <div className="bg-gray-900/50 border border-gray-700 border-dashed rounded-lg p-20 text-center">
-                  <p className="text-gray-400 font-bold uppercase tracking-widest">Aucun hackathon trouvé</p>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-12 text-center">
+                  <p className="text-white/60 font-black italic uppercase tracking-tight">Aucun hackathon trouvé</p>
+                  <p className="text-[10px] text-white/30 mt-2 uppercase tracking-widest">Modifie tes filtres ou crée-en un nouveau.</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {filteredCompetitions.map(c => (
-                    <div key={c.id} className="bg-gray-800/50 border border-gray-700 rounded-lg p-8 space-y-6 hover:border-blue-600 hover:bg-gray-800/70 transition-all group">
-                       <div className="flex justify-between items-start">
-                          <div className="space-y-1">
-                            <span className={`px-2 py-0.5 rounded-[4px] text-[8px] font-bold uppercase tracking-widest ${STATUS_COLOR[c.status] || 'bg-white/10 text-white/60'}`}>
-                              {c.status}
-                            </span>
-                            <h3 className="text-xl font-bold text-white leading-tight mt-2">{c.title}</h3>
-                          </div>
-                          <div className="p-3 bg-gray-700 rounded-lg group-hover:bg-blue-600 transition-all">
-                             <svg className="w-5 h-5 text-gray-400 group-hover:text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
-                          </div>
-                       </div>
-                       
-                       <p className="text-xs text-gray-400 font-mono leading-relaxed line-clamp-2">{c.description}</p>
-                       
-                       <div className="flex items-center justify-between pt-4 border-t border-gray-700">
-                          <div className="flex gap-4 items-center">
-                             <div className="text-center">
-                                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">Participants</p>
-                                <p className="text-sm font-black text-white">{c._count?.participants || 0}</p>
-                             </div>
-                             <div className="text-center">
-                                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">Budget (XC)</p>
-                                <p className="text-sm font-black text-blue-400">{c.rewardPool}</p>
-                             </div>
-                          </div>
-                          <Link 
+                <div className="space-y-4">
+                  {filteredCompetitions.map((c) => (
+                    <div
+                      key={c.id}
+                      className="bg-white/[0.03] border border-white/10 backdrop-blur-xl rounded-2xl p-6 flex flex-col md:flex-row items-start md:items-center gap-6 hover:border-white/20 transition-all"
+                    >
+                      <div className="flex-1 space-y-2 min-w-0">
+                        <div className="flex items-center gap-3">
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${STATUS_COLOR[c.status] || "bg-white/10 text-white/60"}`}>
+                            {c.status}
+                          </span>
+                          <span className="text-[8px] border border-cyan-500/30 text-cyan-400 px-2 py-0.5 rounded font-black uppercase tracking-widest">{c.specialty}</span>
+                        </div>
+                        <h3 className="text-lg font-black italic uppercase text-white leading-tight">{c.title}</h3>
+                        <p className="text-xs text-white/40 font-mono line-clamp-1">{c.description}</p>
+                      </div>
+
+                      <div className="flex items-center gap-4 flex-wrap">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Participants</p>
+                          <p className="text-xl font-black text-white">{c._count?.participants || 0}</p>
+                        </div>
+                        <div className="text-right hidden sm:block">
+                          <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Budget (XC)</p>
+                          <p className="text-xl font-black text-cyan-400">{c.rewardPool}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          {getNextStatus(c.status) && getNextStatusLabel(c.status) !== "Lancer" && (
+                            <button
+                              onClick={() => handleStatusChange(c.id, getNextStatus(c.status)!)}
+                              className="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all"
+                            >
+                              {getNextStatusLabel(c.status)}
+                            </button>
+                          )}
+                          <Link
                             href={`/hackathon/${c.id}/details`}
-                            className="px-6 py-2.5 rounded-lg bg-gray-700 border border-gray-600 hover:border-blue-600 hover:bg-gray-700 text-[10px] font-bold uppercase tracking-widest transition-all text-white"
+                            className="bg-white/10 hover:bg-white/20 px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all"
                           >
-                            Détails & Actions
+                            Gérer
                           </Link>
-                       </div>
+                          <button
+                            onClick={() => openDeleteModal(c)}
+                            className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 hover:text-red-300 px-4 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all"
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -359,226 +460,225 @@ export default function CompanyDashboardPage() {
             </div>
           )}
 
-          {activeView === "CREATE" && (
-            <div className="max-w-4xl animate-in fade-in duration-700">
-               <div className="bg-gray-900/50 border border-gray-700 rounded-lg p-12 shadow-lg relative overflow-hidden">
-                  <div className="mb-10 text-center sm:text-left">
-                    <h2 className="text-3xl font-bold text-white">Créer un Nouvel Événement</h2>
-                    <p className="text-gray-400 text-xs mt-2 uppercase tracking-widest">Définissez les paramètres de votre nouvelle compétition</p>
-                  </div>
-
-                  <form className="space-y-10" onSubmit={handleCreateCompetition}>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                       <div className="md:col-span-2 space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Désignation de l'Événement</label>
-                          <input 
-                            required
-                            placeholder="EX: PROJECT ZERO • 2026"
-                            value={compForm.title}
-                            onChange={e => setCompForm(f => ({ ...f, title: e.target.value }))}
-                            className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white font-mono text-sm outline-none focus:ring-1 focus:ring-blue-600 transition-all"
-                          />
-                       </div>
-
-                       <div className="md:col-span-2 space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Description et Objectifs</label>
-                          <textarea 
-                            required
-                            rows={4}
-                            placeholder="DÉTAILLEZ LES OBJECTIFS DU CHALLENGE..."
-                            value={compForm.description}
-                            onChange={e => setCompForm(f => ({ ...f, description: e.target.value }))}
-                            className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white font-mono text-sm outline-none focus:ring-1 focus:ring-blue-600 resize-none transition-all"
-                          />
-                       </div>
-
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Spécialité</label>
-                          <select 
-                            required
-                            value={compForm.specialty || ""}
-                            onChange={e => setCompForm(f => ({ ...f, specialty: e.target.value as any || undefined }))}
-                            className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white text-sm outline-none focus:ring-1 focus:ring-blue-600 transition-all font-bold"
-                          >
-                              <option value="">-- SÉLECTIONNER --</option>
-                              <option value="BACKEND">BACKEND</option>
-                              <option value="FRONTEND">FRONTEND</option>
-                              <option value="FULLSTACK">FULLSTACK</option>
-                              <option value="MOBILE">MOBILE</option>
-                              <option value="DATA">DATA SCI</option>
-                              <option value="CYBERSECURITY">CYBER OP</option>
-                          </select>
-                       </div>
-
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Difficulty</label>
-                          <select 
-                             value={compForm.difficulty}
-                             onChange={e => setCompForm(f => ({ ...f, difficulty: e.target.value as any }))}
-                             className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white text-sm outline-none focus:ring-1 focus:ring-blue-600 transition-all font-bold"
-                          >
-                              <option value="EASY">NORMAL</option>
-                              <option value="MEDIUM">INTERMÉDIAIRE</option>
-                              <option value="HARD">CRITICAL</option>
-                          </select>
-                       </div>
-
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Date de Début</label>
-                          <input 
-                             required
-                             type="datetime-local"
-                             value={compForm.startDate}
-                             onChange={e => setCompForm(f => ({ ...f, startDate: e.target.value }))}
-                             className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white text-sm outline-none focus:ring-1 focus:ring-blue-600 transition-all"
-                          />
-                       </div>
-
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Date de Fin</label>
-                          <input 
-                             required
-                             type="datetime-local"
-                             value={compForm.endDate}
-                             onChange={e => setCompForm(f => ({ ...f, endDate: e.target.value }))}
-                             className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white text-sm outline-none focus:ring-1 focus:ring-blue-600 transition-all"
-                          />
-                       </div>
-
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Budget (XC)</label>
-                          <input 
-                             type="number"
-                             value={compForm.rewardPool}
-                             onChange={e => setCompForm(f => ({ ...f, rewardPool: Number(e.target.value) }))}
-                             className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white font-mono text-lg outline-none focus:ring-1 focus:ring-blue-600 transition-all"
-                          />
-                       </div>
-
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Nombre de Lauréats</label>
-                          <input 
-                             type="number"
-                             value={compForm.topN}
-                             onChange={e => setCompForm(f => ({ ...f, topN: Number(e.target.value) }))}
-                             className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white font-mono text-lg outline-none focus:ring-1 focus:ring-blue-600 transition-all"
-                          />
-                       </div>
-
-                       <div className="space-y-2">
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">Capacité de Participants</label>
-                          <input 
-                             type="number"
-                             value={compForm.maxParticipants || ""}
-                             onChange={e => setCompForm(f => ({ ...f, maxParticipants: e.target.value ? Number(e.target.value) : undefined }))}
-                             className="w-full bg-gray-800/50 border border-gray-700 p-4 rounded-lg text-white font-mono text-lg outline-none focus:ring-1 focus:ring-blue-600 transition-all"
-                          />
-                       </div>
-                    </div>
-
-                    <div className="space-y-6">
-                       <div className="flex items-center gap-4 py-4 border-y border-gray-700">
-                          <div className="relative inline-flex items-center cursor-pointer">
-                            <input 
-                              type="checkbox" 
-                              className="sr-only peer"
-                              checked={compForm.antiCheatEnabled}
-                              onChange={e => setCompForm(f => ({ ...f, antiCheatEnabled: e.target.checked }))}
-                            />
-                            <div className="w-12 h-6 bg-gray-700 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-6"></div>
-                          </div>
-                          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Activer Vérification IA (Anti-Cheat)</label>
-                       </div>
-
-                       {compForm.antiCheatEnabled && (
-                         <div className="p-8 rounded-3xl bg-blue-600/5 border border-blue-600/10 space-y-4 animate-in slide-in-from-top-4">
-                            <div className="flex justify-between items-center text-[10px] font-black text-blue-400 uppercase tracking-widest">
-                               <span>Paramétrage du Seuil Critical</span>
-                               <span>{compForm.antiCheatThreshold}%</span>
-                            </div>
-                            <input 
-                              type="range"
-                              min="0"
-                              max="100"
-                              value={compForm.antiCheatThreshold}
-                              onChange={e => setCompForm(f => ({ ...f, antiCheatThreshold: Number(e.target.value) }))}
-                              className="w-full accent-blue-600"
-                            />
-                            <p className="text-[9px] text-gray-400 italic font-mono uppercase text-center">Un score de confiance inférieur au seuil entraînera une disqualification automatique.</p>
-                         </div>
-                       )}
-                    </div>
-
-                    <div className="pt-8">
-                       <button 
-                        disabled={createLoading}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white p-6 rounded-[30px] font-black uppercase tracking-[0.3em] text-sm shadow-2xl shadow-blue-600/30 transition-all active:scale-[0.98] disabled:opacity-50"
-                       >
-                         {createLoading ? "CRÉATION EN COURS..." : "CRÉER L'ÉVÉNEMENT"}
-                       </button>
-                       {error && <p className="text-center text-red-400 text-[10px] font-bold uppercase mt-4 animate-pulse">{error}</p>}
-                       {compSuccess && <p className="text-center text-blue-400 text-[10px] font-bold uppercase mt-4">{compSuccess}</p>}
-                    </div>
-                  </form>
-               </div>
-            </div>
-          )}
-
+          {/* ─── RECRUITMENT ─── */}
           {activeView === "RECRUITMENT" && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <RecruitmentDashboard />
             </div>
           )}
         </main>
       </div>
+
+      {/* ─── Create Hackathon Modal (shared) ─── */}
+      {showCreate && (
+        <CreateHackathonModal
+          form={compForm}
+          setForm={setCompForm}
+          loading={createLoading}
+          error={error}
+          onClose={() => { if (!createLoading) { setShowCreate(false); setError(null); } }}
+          onSubmit={handleCreateCompetition}
+        />
+      )}
+
+      {/* ─── Delete Hackathon Modal (two-step, themed) ─── */}
+      {deleteTarget && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="company-delete-modal-title"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onMouseDown={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}
+        >
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-md" aria-hidden />
+          <div className="relative w-full max-w-lg rounded-3xl border border-red-500/20 bg-[#0a0f1a]/95 backdrop-blur-3xl shadow-[0_0_80px_-20px_rgba(239,68,68,0.4)] overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-4 duration-200">
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent" aria-hidden />
+            <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-red-500/10 blur-[80px] pointer-events-none" aria-hidden />
+            <div className="relative p-8 space-y-6">
+              <div className="flex items-start gap-4">
+                <div className="shrink-0 w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-black tracking-[0.3em] text-red-400 uppercase">
+                    {deleteStep === 1 ? "Étape 1 / 2" : "Étape 2 / 2 — Confirmation finale"}
+                  </p>
+                  <h2 id="company-delete-modal-title" className="mt-1 text-2xl font-black italic uppercase tracking-tight text-white leading-tight">
+                    Supprimer ce hackathon ?
+                  </h2>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-5 space-y-2">
+                <p className="text-[9px] font-black tracking-[0.3em] text-white/30 uppercase">Cible</p>
+                <p className="text-lg font-black italic uppercase text-white break-words">{deleteTarget.title}</p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-white/5 text-white/60 border border-white/5">{deleteTarget.status}</span>
+                  {deleteTarget.specialty && (
+                    <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">{deleteTarget.specialty}</span>
+                  )}
+                  <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-white/5 text-white/40">{deleteTarget._count?.participants || 0} participant(s)</span>
+                </div>
+              </div>
+
+              {deleteStep === 1 ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-white/70 leading-relaxed">
+                    Cette action est <span className="font-black text-red-400 uppercase tracking-wider">irréversible</span>. Vont être supprimés:
+                  </p>
+                  <ul className="space-y-2 text-sm text-white/60">
+                    <li className="flex items-start gap-2"><span className="text-red-400 mt-0.5">▸</span> Équipes, membres et invitations</li>
+                    <li className="flex items-start gap-2"><span className="text-red-400 mt-0.5">▸</span> Checkpoints et soumissions</li>
+                    <li className="flex items-start gap-2"><span className="text-red-400 mt-0.5">▸</span> Notifications associées (logs blockchain archivés)</li>
+                    {deleteTarget.rewardPool > 0 && deleteTarget.status !== "COMPLETED" && deleteTarget.status !== "ARCHIVED" && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-400 mt-0.5">↺</span>
+                        <span className="text-emerald-300"><span className="font-black">{deleteTarget.rewardPool} ARENA</span> restitués au créateur.</span>
+                      </li>
+                    )}
+                  </ul>
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={closeDeleteModal} className="flex-1 py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-black uppercase tracking-[0.2em] text-white/60 hover:text-white transition-all">Annuler</button>
+                    <button onClick={() => setDeleteStep(2)} className="flex-1 py-3.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 hover:border-red-500/50 text-[11px] font-black uppercase tracking-[0.2em] text-red-400 hover:text-red-300 transition-all">Continuer →</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-white/70">Pour confirmer, saisis exactement le titre du hackathon:</p>
+                  <div className="rounded-xl border border-white/10 bg-black/40 px-4 py-3">
+                    <p className="text-xs font-mono text-cyan-400 break-words select-all">{deleteTarget.title}</p>
+                  </div>
+                  <input
+                    autoFocus
+                    type="text"
+                    value={deleteConfirmText}
+                    onChange={(e) => setDeleteConfirmText(e.target.value)}
+                    placeholder="Saisir le titre ici..."
+                    disabled={deleting}
+                    className="w-full bg-white/5 border border-white/10 focus:border-red-500/50 rounded-xl px-4 py-3.5 text-sm font-mono text-white outline-none transition-all placeholder:text-white/20 disabled:opacity-50"
+                    onKeyDown={(e) => { if (e.key === "Enter" && deleteConfirmText.trim() === deleteTarget.title && !deleting) confirmDeleteCompetition(); }}
+                  />
+                  {deleteResultMsg && (
+                    <div className={`rounded-xl px-4 py-3 text-xs font-black uppercase tracking-widest ${deleteResultMsg.startsWith("Suppression impossible") ? "bg-red-500/10 border border-red-500/30 text-red-400" : "bg-emerald-500/10 border border-emerald-500/30 text-emerald-400"}`}>{deleteResultMsg}</div>
+                  )}
+                  <div className="flex gap-3 pt-2">
+                    <button onClick={() => { setDeleteStep(1); setDeleteConfirmText(""); setDeleteResultMsg(null); }} disabled={deleting} className="flex-1 py-3.5 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-black uppercase tracking-[0.2em] text-white/60 hover:text-white transition-all disabled:opacity-50">← Retour</button>
+                    <button onClick={confirmDeleteCompetition} disabled={deleting || deleteConfirmText.trim() !== deleteTarget.title} className="flex-1 py-3.5 rounded-2xl bg-red-500 hover:bg-red-400 text-black text-[11px] font-black uppercase tracking-[0.2em] transition-all shadow-xl shadow-red-500/30 disabled:bg-red-500/20 disabled:text-red-300/40 disabled:shadow-none disabled:cursor-not-allowed">
+                      {deleting ? "Suppression..." : "Supprimer définitivement"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────
-// HELPER COMPONENTS
+// HELPER COMPONENTS — matched to admin dashboard style
 // ─────────────────────────────────────────────────────────────────
 
-function SidebarItem({ icon, label, active, onClick }: { icon: string, label: string, active: boolean, onClick: () => void }) {
+function SidebarItem({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <button 
+    <button
       onClick={onClick}
-      className={`w-full flex items-center gap-4 px-6 py-4 rounded-lg transition-all duration-300 border ${active ? 'bg-blue-600/10 text-blue-400 border-blue-600/20' : 'text-gray-400 border-transparent hover:bg-gray-700/20 hover:text-gray-200'}`}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+        active
+          ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20"
+          : "text-white/40 border border-transparent hover:bg-white/5 hover:text-white/80"
+      }`}
     >
-      <span className={`w-6 h-6 flex items-center justify-center text-sm font-bold ${active ? 'text-blue-400' : 'text-gray-400'}`}>{icon}</span>
-      <span className={`text-[10px] font-bold uppercase tracking-widest ${active ? 'opacity-100' : 'opacity-60'}`}>{label}</span>
-      {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-blue-400"></div>}
+      <span className={active ? "text-cyan-400" : "text-white/40"}>{icon}</span>
+      <span className={`text-[10px] font-black uppercase tracking-widest ${active ? "opacity-100" : "opacity-80"}`}>{label}</span>
+      {active && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-cyan-400" />}
     </button>
   );
 }
 
-function MetricCard({ label, value, subValue }: { label: string, value: string | number, subValue: string }) {
+const METRIC_COLOR: Record<string, { ring: string; text: string; bg: string }> = {
+  cyan: { ring: "hover:border-cyan-500/30", text: "text-cyan-400", bg: "bg-cyan-500/10" },
+  emerald: { ring: "hover:border-emerald-500/30", text: "text-emerald-400", bg: "bg-emerald-500/10" },
+  amber: { ring: "hover:border-amber-500/30", text: "text-amber-400", bg: "bg-amber-500/10" },
+  violet: { ring: "hover:border-violet-500/30", text: "text-violet-400", bg: "bg-violet-500/10" },
+};
+
+function MetricCard({
+  label,
+  value,
+  subValue,
+  color = "cyan",
+}: {
+  label: string;
+  value: string | number;
+  subValue: string;
+  color?: "cyan" | "emerald" | "amber" | "violet";
+}) {
+  const c = METRIC_COLOR[color];
   return (
-    <div className="p-8 rounded-[32px] border bg-gray-800/30 border-gray-700 backdrop-blur-sm transition-all hover:border-blue-600/30 hover:bg-gray-800/40 duration-300 cursor-default">
-      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-3">{label}</p>
-      <div className="flex items-end gap-2">
-        <p className="text-4xl font-black italic tracking-tighter leading-none text-white">{value}</p>
-        <span className="text-[8px] font-bold text-gray-400 uppercase mb-1 tracking-widest">{subValue}</span>
-      </div>
+    <div className={`relative p-6 rounded-2xl border bg-white/[0.03] border-white/10 backdrop-blur-xl transition-all duration-300 ${c.ring}`}>
+      <div className={`absolute top-0 right-0 w-20 h-20 ${c.bg} blur-2xl rounded-full -z-10`} />
+      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 mb-3">{label}</p>
+      <p className="text-4xl font-black italic tracking-tighter leading-none text-white">{value}</p>
+      <p className={`mt-2 text-[10px] font-bold uppercase tracking-widest ${c.text}`}>{subValue}</p>
     </div>
   );
 }
 
 function SectionTitle({ title }: { title: string }) {
   return (
-    <div className="flex items-center gap-4 mb-6">
-      <div className="h-4 w-1 bg-blue-600"></div>
-      <h2 className="text-[10px] font-bold uppercase tracking-wide text-gray-300">{title}</h2>
+    <div className="flex items-center gap-3">
+      <div className="h-4 w-1 bg-cyan-500 rounded-full" />
+      <h2 className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60">{title}</h2>
+      <span className="flex-1 h-px bg-white/5" />
     </div>
   );
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  SCHEDULED: "bg-gray-700/30 text-gray-300",
-  OPEN_FOR_ENTRY: "bg-blue-600/20 text-blue-300",
-  RUNNING: "bg-blue-600/20 text-blue-300",
-  SUBMISSION_CLOSED: "bg-gray-700/30 text-gray-300",
-  EVALUATING: "bg-blue-600/20 text-blue-300",
-  COMPLETED: "bg-blue-600/20 text-blue-300",
-  ARCHIVED: "bg-gray-700/20 text-gray-400",
+  SCHEDULED: "bg-white/10 text-white/60",
+  OPEN_FOR_ENTRY: "bg-emerald-500/20 text-emerald-400 border border-emerald-500/20",
+  RUNNING: "bg-cyan-500/20 text-cyan-400 border border-cyan-500/20",
+  SUBMISSION_CLOSED: "bg-amber-500/20 text-amber-400 border border-amber-500/20",
+  EVALUATING: "bg-violet-500/20 text-violet-400 border border-violet-500/20",
+  COMPLETED: "bg-emerald-500/10 text-emerald-400/80 border border-emerald-500/10",
+  ARCHIVED: "bg-white/5 text-white/30",
 };
+
+function getNextStatus(status: string): CompetitionStatus | null {
+  switch (status) {
+    case "SCHEDULED": return "OPEN_FOR_ENTRY";
+    case "OPEN_FOR_ENTRY": return "RUNNING";
+    case "RUNNING": return "SUBMISSION_CLOSED";
+    case "SUBMISSION_CLOSED": return "EVALUATING";
+    case "EVALUATING": return "COMPLETED";
+    case "COMPLETED": return "ARCHIVED";
+    default: return null;
+  }
+}
+
+function getNextStatusLabel(status: string): string {
+  switch (status) {
+    case "SCHEDULED": return "Ouvrir";
+    case "OPEN_FOR_ENTRY": return "Lancer";
+    case "RUNNING": return "Clore";
+    case "SUBMISSION_CLOSED": return "Évaluer";
+    case "EVALUATING": return "Compléter";
+    case "COMPLETED": return "Archiver";
+    default: return "—";
+  }
+}

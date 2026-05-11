@@ -10,7 +10,7 @@ import { getLeaderboard, getProfile, type LeaderboardUser, type UserProfile } fr
 export default function ClassementsPage() {
   const { lang } = useAccessibility();
   const t = translations[lang];
-  
+
   const [users, setUsers] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -19,7 +19,6 @@ export default function ClassementsPage() {
   const USERS_PER_PAGE = 20;
 
   useEffect(() => {
-    // Récupérer le profil de l'utilisateur connecté
     getProfile()
       .then((profile: UserProfile) => setCurrentUserId(profile.id ?? null))
       .catch(() => setCurrentUserId(null));
@@ -44,13 +43,9 @@ export default function ClassementsPage() {
         const name = err instanceof DOMException ? err.name : "";
         const isAbort =
           name === "AbortError" ||
-          (err &&
-            typeof err === "object" &&
-            "message" in err &&
-            typeof (err as { message?: string }).message === "string" &&
-            /abort/i.test((err as { message: string }).message));
+          (err && typeof err === "object" && "message" in err && typeof (err as { message?: string }).message === "string" && /abort/i.test((err as { message: string }).message));
         const msg = isAbort
-          ? "Délai dépassé ou API injoignable. Lance le backend Nest (ex. npm run start:dev dans le dossier back, port 3000) et vérifie NEXT_PUBLIC_API_URL."
+          ? "Délai dépassé ou API injoignable."
           : err && typeof err === "object" && "message" in err && typeof (err as { message?: string }).message === "string"
             ? (err as { message: string }).message
             : "Impossible de charger le classement";
@@ -74,17 +69,14 @@ export default function ClassementsPage() {
     setPage((p) => Math.min(Math.max(1, p), tp));
   }, [users.length]);
 
-  // Pagination (au moins 1 page pour éviter totalPages === 0 et page qui passe à 0)
   const totalPages = Math.max(1, Math.ceil(users.length / USERS_PER_PAGE));
   const safePage = Math.min(Math.max(1, page), totalPages);
   const startIndex = (safePage - 1) * USERS_PER_PAGE;
   const endIndex = startIndex + USERS_PER_PAGE;
   const paginatedUsers = users.slice(startIndex, endIndex);
 
-  // Top 3
   const top3 = users.slice(0, 3);
 
-  // Générer des couleurs et initiales
   const getInitials = (firstName: string, lastName: string) => {
     const a = (firstName ?? "").trim();
     const b = (lastName ?? "").trim();
@@ -104,51 +96,54 @@ export default function ClassementsPage() {
     return colors[index % colors.length];
   };
 
-  const getBadgeColor = (rank: number) => {
-    if (rank === 1) return { badge: "bg-amber-500", border: "border-amber-400" };
-    if (rank === 2) return { badge: "bg-slate-400", border: "border-slate-300" };
-    if (rank === 3) return { badge: "bg-amber-700", border: "border-amber-600" };
-    return { badge: "bg-white/20", border: "border-white/20" };
-  };
-
-  const getBadgeText = (rank: number) => {
-    if (rank === 1) return t.ranking.firstPlace;
-    if (rank === 2) return t.ranking.secondPlace;
-    if (rank === 3) return t.ranking.thirdPlace;
-    return `#${rank}`;
+  const podiumMeta = (rank: number) => {
+    if (rank === 1) return { medal: "🥇", ring: "ring-amber-400/60", glow: "shadow-[0_0_60px_-10px_rgba(251,191,36,0.5)]", color: "from-amber-400 to-yellow-600", border: "border-amber-400/40", label: t.ranking.firstPlace };
+    if (rank === 2) return { medal: "🥈", ring: "ring-slate-300/50", glow: "shadow-[0_0_40px_-12px_rgba(203,213,225,0.4)]", color: "from-slate-300 to-slate-500", border: "border-slate-300/30", label: t.ranking.secondPlace };
+    if (rank === 3) return { medal: "🥉", ring: "ring-amber-700/50", glow: "shadow-[0_0_40px_-12px_rgba(180,83,9,0.4)]", color: "from-amber-700 to-orange-800", border: "border-amber-700/30", label: t.ranking.thirdPlace };
+    return { medal: "", ring: "ring-white/10", glow: "", color: "from-white/10 to-white/5", border: "border-white/10", label: `#${rank}` };
   };
 
   return (
     <div className="min-h-screen text-white font-sans relative">
       <PlatformNavbar />
 
-      <main className="max-w-5xl mx-auto px-6 md:px-8 py-10">
+      <main className="max-w-5xl mx-auto px-6 md:px-8 py-10 relative z-10">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-3xl md:text-4xl font-bold text-white">{t.ranking.weekly}</h1>
-          <p className="mt-2 text-white/60 text-sm flex items-center justify-center gap-1.5">
-            <svg className="w-4 h-4 text-cyan-400" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" /></svg>
-            {t.ranking.subtitle}
-          </p>
+        <div className="mb-10 flex items-start gap-4">
+          <div className="shrink-0 w-12 h-12 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] font-black tracking-[0.3em] text-amber-400 uppercase">Hall of Fame</p>
+            <h1 className="mt-1 text-3xl md:text-4xl font-black italic uppercase tracking-tight text-white leading-tight">
+              {t.ranking.weekly}
+            </h1>
+            <p className="mt-1 text-sm text-white/40">{t.ranking.subtitle}</p>
+          </div>
         </div>
 
         {loading ? (
-          <div className="text-center py-20">
-            <div className="inline-block w-8 h-8 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
-            <p className="mt-4 text-white/60">Chargement du classement...</p>
+          <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <div className="w-10 h-10 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
+            <p className="text-[10px] font-black tracking-[0.3em] text-white/40 uppercase">Chargement…</p>
           </div>
         ) : error ? (
-          <div className="text-center py-20">
-            <p className="text-red-400">{error}</p>
+          <div className="rounded-2xl border border-red-500/30 bg-red-500/5 backdrop-blur-xl p-8 text-center">
+            <p className="text-red-300 font-mono text-sm">{error}</p>
           </div>
         ) : users.length === 0 ? (
-          <div className="text-center py-20 rounded-2xl border border-white/10 bg-white/5">
-            <p className="text-white/80 text-lg">
-              {lang === "fr" && "Aucun codeur dans le classement pour le moment."}
-              {lang === "en" && "No developers on the leaderboard yet."}
-              {lang === "ar" && "لا يوجد مطورون في التصنيف بعد."}
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-xl p-12 text-center">
+            <div className="w-16 h-16 rounded-full bg-white/5 border border-white/10 mx-auto flex items-center justify-center mb-4">
+              <span className="text-3xl opacity-60">🏆</span>
+            </div>
+            <p className="text-white/80 text-lg font-black italic uppercase tracking-tight">
+              {lang === "fr" && "Aucun codeur dans le classement"}
+              {lang === "en" && "No developers on the leaderboard yet"}
+              {lang === "ar" && "لا يوجد مطورون في التصنيف بعد"}
             </p>
-            <p className="mt-2 text-sm text-white/50">
+            <p className="mt-2 text-sm text-white/40">
               {lang === "fr" && "Reviens plus tard ou inscris-toi pour apparaître ici."}
               {lang === "en" && "Check back later or sign up to appear here."}
               {lang === "ar" && "عد لاحقًا أو سجّل لتظهر في القائمة."}
@@ -158,128 +153,162 @@ export default function ClassementsPage() {
           <>
             {/* Top 3 Podium */}
             {top3.length >= 3 && (
-              <div className="flex items-end justify-center gap-4 md:gap-8 mb-16">
-                {top3.map((coder) => {
-                  const colors = getBadgeColor(coder.rank);
-                  return (
-                    <div
-                      key={coder.id}
-                      className={`flex flex-col items-center ${
-                        coder.rank === 1 ? "order-2 -mt-4" : coder.rank === 2 ? "order-1" : "order-3"
-                      }`}
-                    >
-                      <div className={`relative ${coder.rank === 1 ? "scale-110" : "scale-95"}`}>
-                        <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center text-xl font-bold text-black border-2 ${colors.border}`}>
-                          {getInitials(coder.firstName, coder.lastName)}
+              <div className="relative mb-16">
+                <div className="absolute inset-x-0 top-1/2 h-px bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" aria-hidden />
+                <div className="relative flex items-end justify-center gap-3 sm:gap-6 md:gap-10">
+                  {top3.map((coder) => {
+                    const meta = podiumMeta(coder.rank);
+                    const sizeClass = coder.rank === 1 ? "w-24 h-24 md:w-28 md:h-28 text-2xl" : "w-20 h-20 md:w-24 md:h-24 text-xl";
+                    const heightOffset = coder.rank === 1 ? "-mt-6 md:-mt-10" : coder.rank === 2 ? "mt-2" : "mt-4";
+                    const order = coder.rank === 1 ? "order-2" : coder.rank === 2 ? "order-1" : "order-3";
+                    return (
+                      <div key={coder.id} className={`flex flex-col items-center ${order} ${heightOffset}`}>
+                        <span className="text-3xl md:text-4xl mb-2" aria-hidden>{meta.medal}</span>
+                        <div className={`relative ${meta.glow}`}>
+                          <div className={`${sizeClass} rounded-full bg-gradient-to-br ${meta.color} flex items-center justify-center font-black text-white/95 ring-4 ${meta.ring} ring-offset-4 ring-offset-[#0a0f1a] transition-transform hover:scale-105`}>
+                            {getInitials(coder.firstName, coder.lastName)}
+                          </div>
                         </div>
-                        <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full ${colors.badge} text-white text-[10px] font-bold whitespace-nowrap`}>
-                          {getBadgeText(coder.rank)}
-                        </div>
+                        <p className="mt-4 text-sm md:text-base font-black italic uppercase tracking-tight text-white text-center px-2 truncate max-w-[140px]">
+                          {coder.firstName} {(coder.lastName ?? "").charAt(0)}
+                          {(coder.lastName ?? "").length > 0 ? "." : ""}
+                        </p>
+                        <p className="text-[10px] font-mono text-amber-400/80 tracking-widest mt-0.5">
+                          {Number(coder.xp ?? 0).toLocaleString()} XP
+                        </p>
+                        {coder.mainSpecialty && (
+                          <span className="mt-1 text-[8px] font-black uppercase tracking-widest text-white/40">
+                            {coder.mainSpecialty}
+                          </span>
+                        )}
                       </div>
-                      <p className="mt-4 text-cyan-400 font-semibold">
-                        {coder.firstName} {(coder.lastName ?? "").charAt(0)}
-                        {(coder.lastName ?? "").length > 0 ? "." : ""}
-                      </p>
-                      <p className="text-sm text-white/70">{Number(coder.xp ?? 0).toLocaleString()} XP</p>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
 
-            {/* Table */}
-            <div className="rounded-2xl border border-white/10 bg-white/5 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="text-left py-4 px-4 text-xs font-bold text-white/60 uppercase tracking-wider">{t.ranking.rank}</th>
-                      <th className="text-left py-4 px-4 text-xs font-bold text-white/60 uppercase tracking-wider">{t.ranking.coder}</th>
-                      <th className="text-left py-4 px-4 text-xs font-bold text-white/60 uppercase tracking-wider">{t.ranking.experience}</th>
-                      <th className="text-left py-4 px-4 text-xs font-bold text-white/60 uppercase tracking-wider">Spécialité</th>
-                      <th className="text-left py-4 px-4 text-xs font-bold text-white/60 uppercase tracking-wider">{t.ranking.actions}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {paginatedUsers.map((user) => {
-                      const isCurrentUser = user.id === currentUserId;
-                      return (
-                        <tr
-                          key={user.id}
-                          className={`border-b border-white/5 ${isCurrentUser ? "bg-cyan-500/10 border-l-4 border-l-cyan-500" : "hover:bg-white/5"}`}
-                        >
-                          <td className="py-4 px-4 text-sm font-bold text-white/80">#{String(user.rank).padStart(2, "0")}</td>
-                          <td className="py-4 px-4">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getColor(user.rank)} flex items-center justify-center text-sm font-bold`}>
-                                {getInitials(user.firstName, user.lastName)}
-                              </div>
-                              <div>
-                                <p className="font-medium flex items-center gap-2">
-                                  {user.firstName} {user.lastName}
-                                  {isCurrentUser && (
-                                    <span className="px-2 py-0.5 rounded-full bg-cyan-500/30 text-cyan-400 text-[10px] font-semibold">
-                                      {t.ranking.you}
-                                    </span>
-                                  )}
-                                </p>
-                                <p className="text-xs text-white/50">{user.mainSpecialty}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-cyan-400 font-semibold">{Number(user.xp ?? 0).toLocaleString()} XP</td>
-                          <td className="py-4 px-4">
-                            <span className="px-2 py-1 rounded-lg bg-white/10 text-xs text-white/70">
-                              {user.mainSpecialty}
-                            </span>
-                          </td>
-                          <td className="py-4 px-4">
-                            {isCurrentUser ? (
-                              <Link
-                                href="/profile"
-                                className="inline-block px-4 py-2 rounded-lg bg-cyan-500 text-black font-bold text-xs uppercase hover:bg-cyan-400 transition-colors"
-                              >
-                                {t.ranking.viewStats}
-                              </Link>
-                            ) : (
-                              <button type="button" className="p-2 rounded-lg text-white/60 hover:bg-white/10" aria-label="Menu">
-                                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" /></svg>
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+            {/* Leaderboard list */}
+            <div className="rounded-3xl border border-white/10 bg-white/[0.03] backdrop-blur-xl shadow-2xl overflow-hidden">
+              <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent" aria-hidden />
+
+              {/* Header row */}
+              <div className="hidden md:grid grid-cols-12 gap-4 px-6 py-3 border-b border-white/5 bg-black/20">
+                <div className="col-span-1 text-[10px] font-black text-white/30 uppercase tracking-widest">{t.ranking.rank}</div>
+                <div className="col-span-5 text-[10px] font-black text-white/30 uppercase tracking-widest">{t.ranking.coder}</div>
+                <div className="col-span-2 text-[10px] font-black text-white/30 uppercase tracking-widest">{t.ranking.experience}</div>
+                <div className="col-span-2 text-[10px] font-black text-white/30 uppercase tracking-widest">Spécialité</div>
+                <div className="col-span-2 text-[10px] font-black text-white/30 uppercase tracking-widest text-right">{t.ranking.actions}</div>
               </div>
 
+              <ul className="divide-y divide-white/5">
+                {paginatedUsers.map((user) => {
+                  const isCurrentUser = user.id === currentUserId;
+                  const meta = podiumMeta(user.rank);
+                  return (
+                    <li
+                      key={user.id}
+                      className={`grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 items-center px-6 py-4 transition-all ${
+                        isCurrentUser
+                          ? "bg-cyan-500/10 border-l-2 border-l-cyan-400"
+                          : "hover:bg-white/5"
+                      }`}
+                    >
+                      {/* Rank */}
+                      <div className="md:col-span-1 flex items-center gap-2">
+                        <span className="text-[10px] font-black text-white/30 uppercase tracking-widest md:hidden">Rang</span>
+                        <span className={`text-sm font-black ${user.rank <= 3 ? "text-amber-400" : "text-white/60"} font-mono`}>
+                          #{String(user.rank).padStart(2, "0")}
+                        </span>
+                        {user.rank <= 3 && <span aria-hidden>{meta.medal}</span>}
+                      </div>
+
+                      {/* Coder */}
+                      <div className="md:col-span-5 flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getColor(user.rank)} flex items-center justify-center text-xs font-black text-white shrink-0`}>
+                          {getInitials(user.firstName, user.lastName)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-bold text-white text-sm flex items-center gap-2 truncate">
+                            <span className="truncate">{user.firstName} {user.lastName}</span>
+                            {isCurrentUser && (
+                              <span className="shrink-0 px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[9px] font-black uppercase tracking-widest border border-cyan-500/30">
+                                {t.ranking.you}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-[10px] text-white/30 font-mono tracking-tight truncate">{user.mainSpecialty}</p>
+                        </div>
+                      </div>
+
+                      {/* XP */}
+                      <div className="md:col-span-2 flex items-center gap-2">
+                        <span className="text-[10px] font-black text-white/30 uppercase tracking-widest md:hidden">XP</span>
+                        <span className="text-sm font-black text-cyan-400 font-mono tracking-tight">
+                          {Number(user.xp ?? 0).toLocaleString()} <span className="text-[10px] text-cyan-400/60">XP</span>
+                        </span>
+                      </div>
+
+                      {/* Specialty */}
+                      <div className="md:col-span-2">
+                        <span className="inline-block px-2.5 py-1 rounded-md bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest text-white/50">
+                          {user.mainSpecialty}
+                        </span>
+                      </div>
+
+                      {/* Action */}
+                      <div className="md:col-span-2 flex items-center justify-end">
+                        {isCurrentUser ? (
+                          <Link
+                            href="/profile"
+                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-cyan-500 text-black font-black text-[10px] uppercase tracking-widest hover:bg-cyan-400 transition-all shadow-lg shadow-cyan-500/20"
+                          >
+                            {t.ranking.viewStats}
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            className="p-2 rounded-lg text-white/40 hover:text-white hover:bg-white/5 transition-all"
+                            aria-label="Menu"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+
               {/* Pagination */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-4 border-t border-white/10">
-                <p className="text-sm text-white/50">
-                  {t.ranking.showing} {startIndex + 1}-{Math.min(endIndex, users.length)} {t.ranking.coders} {users.length}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 border-t border-white/5 bg-black/20">
+                <p className="text-[10px] font-mono text-white/40 tracking-tight">
+                  {t.ranking.showing} <span className="text-white/70">{startIndex + 1}-{Math.min(endIndex, users.length)}</span> {t.ranking.coders} <span className="text-white/70">{users.length}</span>
                 </p>
                 <div className="flex items-center gap-2">
-                  <button 
-                    type="button" 
-                    className="p-2 rounded-lg border border-white/20 text-white/70 hover:bg-white/10 disabled:opacity-50" 
+                  <button
+                    type="button"
+                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center"
                     aria-label="Page précédente"
                     disabled={safePage <= 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
                   </button>
-                  <span className="px-3 text-sm text-white/80 tabular-nums min-w-[5rem] text-center">
+                  <span className="px-3 text-[10px] font-black font-mono text-white/80 tracking-widest uppercase min-w-[5rem] text-center">
                     {safePage} / {totalPages}
                   </span>
-                  <button 
-                    type="button" 
-                    className="p-2 rounded-lg border border-white/20 text-white/70 hover:bg-white/10 disabled:opacity-50" 
+                  <button
+                    type="button"
+                    className="w-9 h-9 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all flex items-center justify-center"
                     aria-label="Page suivante"
                     disabled={safePage >= totalPages}
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
                   </button>
                 </div>
               </div>
